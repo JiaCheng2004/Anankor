@@ -1,4 +1,4 @@
-FROM redis:latest
+FROM redis:alpine
 
 ENV TZ=America/Los_Angeles
 RUN apk add --no-cache tzdata \

@@ -4,6 +4,14 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: anankor-backend:latest
+    develop:
+      watch:
+        - path: ./backend
+          action: rebuild
+        - path: ./Cargo.toml
+          action: rebuild
+        - path: ./Cargo.lock
+          action: rebuild
     environment:
       - RUST_LOG=info
     depends_on:
@@ -17,6 +25,14 @@ services:
       context: .
       dockerfile: bot/Dockerfile
     image: anankor-bot:latest
+    develop:
+      watch:
+        - path: ./bot
+          action: rebuild
+        - path: ./Cargo.toml
+          action: rebuild
+        - path: ./Cargo.lock
+          action: rebuild
     environment:
       - RUST_LOG=info
     depends_on:
@@ -48,7 +64,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/shell/ || exit 1"]
+      test: ["CMD", "/usr/bin/curl", "-f", "http://localhost:8000/shell/"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,6 +106,7 @@ services:
       - "3200:3200"
     volumes:
       - ./infrastructure/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
 
   grafana:
     image: grafana/grafana:10.4.0
@@ -108,3 +125,4 @@ volumes:
   dynamodb-data:
   redis-data:
   grafana-data:
+  tempo-data:

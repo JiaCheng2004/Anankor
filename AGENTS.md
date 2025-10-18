@@ -1,12 +1,12 @@
 # Repository Guidelines
 
-This repository is evolving into a distributed Discord platform with a coordinating master bot, a pool of worker bots, and shared services covering music playback, party games, and future AI assistants. The stack centers on Rust with Serenity + Poise (Songbird for voice), Axum for HTTP APIs, Redis for coordination, and DynamoDB for durable state. Our near-term objective is to retire the legacy TypeScript prototype under `src/` and replace it with a Rust-first monorepo managed through Podman Compose. The guidance below explains how to align contributions with that direction so every change reinforces reliability, observability, and maintainability.
+This repository is evolving into a distributed Discord platform with a coordinating master bot, a pool of worker bots, and shared services covering music playback, party games, and future AI assistants. The stack centers on Rust with Serenity + Poise (Songbird for voice), Axum for HTTP APIs, Redis for coordination, and DynamoDB for durable state. Our near-term objective is to retire the legacy TypeScript prototype under `src/` and replace it with a Rust-first monorepo managed through Docker Compose. The guidance below explains how to align contributions with that direction so every change reinforces reliability, observability, and maintainability.
 
 ## Architecture Overview
 
 At runtime the platform consists of cooperating binaries. The **master bot** listens to Discord gateway events, orchestrates slash commands, performs matchmaking between guild requests and worker capacity, and exposes administrative APIs for dashboards or automation. **Worker bots** implement task-specific capabilities (music, games, future AI chat) while offloading heavy lifting to Lavalink for audio, Redis for signaling, and DynamoDB for persistence. An Axum control API delivers REST and WebSocket endpoints for operations tooling, and a Redis or NATS job broker underpins asynchronous task routing and health probes. Packaging everything as Cargo crates inside one workspace lets us share data models, config parsing, and telemetry utilities without copy-paste.
 
-Services default to stateless design. Persistent concerns such as playlists and game history live in DynamoDB modules, while transient coordination (worker availability, queue state, presence heartbeats) stays in Redis with expirations to avoid stale assignments. Axum services expose readiness and liveness probes so Podman and future Kubernetes deployments can supervise processes. Songbird workers stream audio through a sidecar Lavalink container to keep transcoding outside bot processes. The blueprint favors horizontal scaling: add workers to increase throughput, or spin dedicated stacks per region by tweaking the compose file.
+Services default to stateless design. Persistent concerns such as playlists and game history live in DynamoDB modules, while transient coordination (worker availability, queue state, presence heartbeats) stays in Redis with expirations to avoid stale assignments. Axum services expose readiness and liveness probes so Docker Compose and future Kubernetes deployments can supervise processes. Songbird workers stream audio through a sidecar Lavalink container to keep transcoding outside bot processes. The blueprint favors horizontal scaling: add workers to increase throughput, or spin dedicated stacks per region by tweaking the compose file.
 
 Multiple worker bots may run at once; launch each `worker-bot` binary in its own process with a distinct Discord token and capability feature set, and publish unique worker identifiers in Redis so the master can differentiate capacity when scheduling work.
 
@@ -20,7 +20,7 @@ Treat the repository as a Cargo workspace rooted at `/` with the following layou
 - `libs/core/`: Shared domain types, Serde DTOs, and matchmaking contracts consumed by every crate.
 - `libs/infra/`: DynamoDB repositories, Redis pools, tracing bootstrap, error utilities, and AWS integration traits.
 - `libs/proto/`: Optional protobuf/gRPC definitions if we add Songbird sidecars or external control planes.
-- `infrastructure/`: `podman-compose.yaml`, environment samples, Helm charts, and migration scripts with their documentation.
+- `infrastructure/`: `docker-compose.yaml`, environment samples, Helm charts, and migration scripts with their documentation.
 - `ops/`: Operational scripts, e2e flows, and automation (e.g., `ops/checks.sh`, `ops/load-test/`).
 - `legacy/`: Temporary home for the removed TypeScript reference code from commit `07913f2`; consult only for context.
 
@@ -30,7 +30,7 @@ Inside each crate prefer a three-tier module breakdown: `config` for typed setti
 
 Configuration comes from layered sources: default TOML files under `config/`, environment variables, and optional `.env.local` overrides. Use `figment` or `config` to merge inputs, validate on startup, and fail fast with actionable errors. Never commit `.env.local`; every binary needs a `config/default.toml` documenting keys such as `discord.token`, `redis.url`, `dynamo.endpoint`, `lavalink.nodes`, and `telemetry.otlp_endpoint`.
 
-Use Podman (or Docker) to spin dependencies. `podman-compose.yaml` should define DynamoDB Local, Redis, Lavalink, and observability tooling, each with health checks and named volumes. Update `infrastructure/compose/README.md` whenever service definitions change so operators can reproduce the stack.
+Use Docker Compose to spin dependencies. `docker-compose.yaml` should define DynamoDB Local, Redis, Lavalink, and observability tooling, each with health checks and named volumes. Update `infrastructure/compose/README.md` whenever service definitions change so operators can reproduce the stack.
 
 Store secrets in external vaults (1Password, AWS Secrets Manager). For local work rely on `.env.local` plus `direnv` or `dotenvx`. Minimum keys: `DISCORD_MASTER_TOKEN`, `DISCORD_WORKER_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `REDIS_URL`, `LAVALINK_PASSWORD`. Startups must exit loudly when a required key is missing; integration tests should cover that path.
 
@@ -45,7 +45,7 @@ Workspace commands rely on stable Rust. Install the toolchain via `rustup` and k
 - `cargo run -p master-bot`: Start the master bot with `RUST_LOG=info` and local env vars.
 - `cargo run -p worker-bot --features music`: Launch a music worker; map features to `src/capabilities`.
 - `cargo run -p control-api`: Boot the Axum service; append `-- --port 8080` for overrides.
-- `podman-compose up`: Provision DynamoDB, Redis, Lavalink, and observability tooling.
+- `docker compose up`: Provision DynamoDB, Redis, Lavalink, and observability tooling.
 - `cargo nextest run`: Optional accelerated runner; keep config in `nextest.toml`.
 - `just ci`: Wrapper recipe bundling checks, lint, tests, and packaging.
 
@@ -65,7 +65,7 @@ Testing spans three levels. **Unit tests** live alongside code (`mod tests`) and
 
 For music playback, add contract tests covering Redis queue serialization, worker handoff, and graceful degradation when Lavalink drops. Mock Songbird when possible; real Lavalink hits should be `#[ignore]` and executed in nightly suites. Game flows benefit from `proptest` scenarios that ensure no two games occupy one voice channel. Track coverage with `cargo tarpaulin --workspace` and keep core crates above 70%, calling out exceptions in PRs.
 
-CI must execute `cargo fmt --check`, `cargo clippy`, and `cargo test`; include `cargo nextest` once we adopt it. End-to-end scripts under `ops/e2e/` should provision dependencies with Podman and run scenario binaries. Document the exact `podman-compose` file and command sequence so contributors can replay the suite locally.
+CI must execute `cargo fmt --check`, `cargo clippy`, and `cargo test`; include `cargo nextest` once we adopt it. End-to-end scripts under `ops/e2e/` should provision dependencies with Docker and run scenario binaries. Document the exact `docker-compose` file and command sequence so contributors can replay the suite locally.
 
 ## Observability & Operational Readiness
 
@@ -98,7 +98,7 @@ Each crate should contain a concise `README.md` covering purpose, commands, and 
 New contributors should follow this checklist to ramp quickly:
 
 - Install Rust (stable) plus supporting tools (`rustup`, `cargo-nextest`, `cargo-tarpaulin`, `just`).
-- Set up Podman and confirm `podman-compose up` starts DynamoDB, Redis, Lavalink, and observability services.
+- Set up Docker and confirm `docker compose up` starts DynamoDB, Redis, Lavalink, and observability services.
 - Create `.env.local` with Discord tokens and AWS credentials targeting local stacks.
 - Run `cargo check`, `cargo fmt`, `cargo clippy`, and `cargo test` to verify a clean baseline.
 - Launch `cargo run -p master-bot` and `cargo run -p worker-bot --features music` against a sandbox guild.
