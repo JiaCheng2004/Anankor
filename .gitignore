@@ -1,0 +1,15 @@
+target/
+**/*.rs.bk
+Cargo.lock
+node_modules/
+.idea/
+.vscode/
+.env
+.env.*
+!.env.sample
+!.env.example
+!.env.template
+.DS_Store
+/tmp/
+/.direnv/
+goal.txt

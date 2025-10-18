@@ -1,0 +1,28 @@
+[workspace]
+members = [
+    "backend",
+    "bot",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Anankor Contributors"]
+homepage = "https://github.com/anankor"
+
+[workspace.dependencies]
+anyhow = "1.0"
+atty = "0.2"
+async-trait = "0.1"
+axum = { version = "0.7", default-features = false, features = ["macros", "json", "ws", "http1"] }
+chrono = { version = "0.4", features = ["serde"] }
+config = "0.14"
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_dynamo = "0.29"
+thiserror = "1.0"
+tokio = { version = "1.37", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
