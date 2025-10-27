@@ -1,0 +1,14 @@
+{
+  "id": null,
+  "title": "Anankor Overview",
+  "tags": ["anankor"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "panels": [],
+  "templating": {"list": []},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

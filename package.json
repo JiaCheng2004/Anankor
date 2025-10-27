@@ -1,0 +1,27 @@
+{
+  "name": "anankor",
+  "private": true,
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=22.21.0",
+    "pnpm": ">=10.19.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "watch": "turbo run watch --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "turbo run format"
+  },
+  "devDependencies": {
+    "@types/node": "22.7.5",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "eslint": "9.10.0",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.3.3",
+    "turbo": "2.5.8",
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@anankor/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "dotenv": "16.4.5",
+    "zod": "4.1.12"
+  }
+}

@@ -1,0 +1,250 @@
+services:
+  master:
+    container_name: anankor-master
+    build:
+      context: ../../
+      dockerfile: apps/master/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    ports:
+      - '8080:8080'
+    develop:
+      watch:
+        - path: ../../apps/master
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  worker1:
+    container_name: anankor-worker-1
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DISCORD_WORKER_TOKEN: ${DISCORD_WORKER_TOKEN_1}
+      WORKER_ID_OVERRIDE: worker-1
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    develop:
+      watch:
+        - path: ../../apps/worker
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  worker2:
+    container_name: anankor-worker-2
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DISCORD_WORKER_TOKEN: ${DISCORD_WORKER_TOKEN_2}
+      WORKER_ID_OVERRIDE: worker-2
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    develop:
+      watch:
+        - path: ../../apps/worker
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  worker3:
+    container_name: anankor-worker-3
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DISCORD_WORKER_TOKEN: ${DISCORD_WORKER_TOKEN_3}
+      WORKER_ID_OVERRIDE: worker-3
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    develop:
+      watch:
+        - path: ../../apps/worker
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  worker4:
+    container_name: anankor-worker-4
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DISCORD_WORKER_TOKEN: ${DISCORD_WORKER_TOKEN_4}
+      WORKER_ID_OVERRIDE: worker-4
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    develop:
+      watch:
+        - path: ../../apps/worker
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  worker5:
+    container_name: anankor-worker-5
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DISCORD_WORKER_TOKEN: ${DISCORD_WORKER_TOKEN_5}
+      WORKER_ID_OVERRIDE: worker-5
+    depends_on:
+      - redis
+      - lavalink
+      - dynamodb
+      - otel-collector
+    develop:
+      watch:
+        - path: ../../apps/worker
+          action: rebuild
+        - path: ../../packages
+          action: rebuild
+        - path: ../../package.json
+          action: rebuild
+        - path: ../../pnpm-workspace.yaml
+          action: rebuild
+        - path: ../../turbo.json
+          action: rebuild
+        - path: ../../tsconfig.base.json
+          action: rebuild
+
+  redis:
+    container_name: anankor-redis
+    image: redis:8.2.2
+    command: ['redis-server', '/usr/local/etc/redis/redis.conf']
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+  dynamodb:
+    container_name: anankor-dynamodb
+    image: amazon/dynamodb-local:2.5.0
+    command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb']
+    ports:
+      - '8000:8000'
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+
+  lavalink:
+    container_name: anankor-lavalink
+    image: ghcr.io/lavalink-devs/lavalink:4.1.1
+    environment:
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+    ports:
+      - '2333:2333'
+
+  prometheus:
+    container_name: anankor-prometheus
+    image: prom/prometheus:v3.7.2
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '9090:9090'
+
+  grafana:
+    container_name: anankor-grafana
+    image: grafana/grafana:12.2.1
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - '3000:3000'
+
+  otel-collector:
+    container_name: anankor-otel
+    image: otel/opentelemetry-collector:0.138.0
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - '4317:4317'
+      - '4318:4318'
+      - '9464:9464'
+
+volumes:
+  dynamodb_data:

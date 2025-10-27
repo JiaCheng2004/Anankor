@@ -1,0 +1,28 @@
+{
+  "name": "@anankor/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm build && node dist/index.js",
+    "build": "tsc --project tsconfig.json",
+    "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@anankor/config": "workspace:*",
+    "@anankor/core": "workspace:*",
+    "@anankor/discord": "workspace:*",
+    "@anankor/ipc": "workspace:*",
+    "@anankor/logger": "workspace:*",
+    "@anankor/music": "workspace:*",
+    "@anankor/schemas": "workspace:*",
+    "@anankor/storage": "workspace:*",
+    "@anankor/telemetry": "workspace:*",
+    "discord.js": "14.22.1",
+    "ioredis": "5.8.2",
+    "lavalink-client": "2.6.1",
+    "zod": "4.1.12"
+  }
+}

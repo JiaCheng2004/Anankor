@@ -1,0 +1,19 @@
+{
+  "name": "@anankor/storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.917.0",
+    "@aws-sdk/lib-dynamodb": "3.917.0",
+    "@aws-sdk/util-dynamodb": "3.917.0",
+    "ioredis": "5.8.2"
+  }
+}
