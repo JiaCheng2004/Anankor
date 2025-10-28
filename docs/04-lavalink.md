@@ -6,3 +6,12 @@ Music playback remains one of the two pillars of the project alongside cooperati
 - Workers connect using the `@anankor/music` package which wraps the `lavalink-client` manager.
 - Reconnect logic should monitor node health, resume or recreate players, and surface metrics for connection status and request latency.
 - Secrets (password) are injected via the Compose `.env` file; never log raw credentials.
+
+## Worker Configuration
+
+Workers discover Lavalink nodes via environment variables loaded in `loadWorkerConfig()`:
+
+- `LAVALINK_PASSWORD` is required and should match the server-side password.
+- `LAVALINK_HOST`, `LAVALINK_PORT`, and `LAVALINK_SECURE` default to `lavalink`, `2333`, and `false` but can be overridden per environment.
+- `LAVALINK_NODES` accepts a JSON array of nodes (`[{ "id": "node-1", "host": "...", "port": 2333, "password": "...", "secure": false }]`) for multi-node deployments.
+- `LAVALINK_CLIENT_NAME` customises the identifier sent with REST calls, useful for tracing cross-service requests.

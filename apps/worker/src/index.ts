@@ -5,6 +5,7 @@ import { bootstrapTelemetry } from '@anankor/telemetry';
 import { acknowledgeJob, claimWorkerToken, createRedisClient, decodeJobEntry, ensureJobConsumerGroup, readJobStream } from '@anankor/ipc';
 import type { GuildCommandJobBase, JobEnvelope, PingRespondJob } from '@anankor/schemas';
 import type { TextBasedChannel, TextChannel } from 'discord.js';
+import { MusicPlaybackService } from './services/music.js';
 
 const JOB_CONSUMER_GROUP = 'anankor-workers';
 const JOB_BLOCK_MS = 5000;
@@ -32,11 +33,19 @@ async function main() {
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates],
   });
 
-  client.once('ready', (readyClient) => {
+  const musicService = new MusicPlaybackService(client, config, logger);
+
+  client.once('ready', async (readyClient) => {
     logger.info(
       { workerId: claim.workerId, user: readyClient.user.tag },
       'Worker bot connected to Discord gateway',
     );
+    try {
+      await musicService.onClientReady();
+      logger.info({ workerId: claim.workerId }, 'Music playback service initialised');
+    } catch (error) {
+      logger.error({ err: error, workerId: claim.workerId }, 'Failed to initialise music playback service');
+    }
   });
 
   client.on('error', (err) => {
@@ -44,6 +53,9 @@ async function main() {
   });
 
   const jobLoopController = new AbortController();
+  const services: WorkerServices = {
+    music: musicService,
+  };
 
   const processJobs = async () => {
     while (!jobLoopController.signal.aborted) {
@@ -53,14 +65,14 @@ async function main() {
           count: JOB_BATCH_SIZE,
         });
 
-        if (entries.length === 0) {
-          continue;
-        }
+    if (entries.length === 0) {
+      continue;
+    }
 
         for (const entry of entries) {
           try {
             const job = decodeJobEntry(entry);
-            await handleJob(client, job, claim.workerId, logger);
+            await handleJob(client, job, claim.workerId, logger, services);
             await acknowledgeJob(redis, JOB_CONSUMER_GROUP, entry.id);
           } catch (error) {
             logger.error({ err: error, workerId: claim.workerId, entryId: entry.id }, 'Failed processing job entry');
@@ -93,6 +105,9 @@ async function main() {
     clearInterval(keepAlive);
     jobLoopController.abort();
     await jobLoopPromise.catch(() => undefined);
+    await musicService.shutdown().catch((error) => {
+      logger.warn({ err: error }, 'Music playback service shutdown reported error');
+    });
     await client.destroy();
     await claim.release();
     await telemetry.shutdown();
@@ -115,6 +130,7 @@ async function handleJob(
   job: JobEnvelope,
   workerId: string,
   logger: ReturnType<typeof createLogger>,
+  services: WorkerServices,
 ): Promise<void> {
   logger.info({ workerId, jobType: job.type, jobId: job.id }, 'Received job from queue');
 
@@ -132,7 +148,7 @@ async function handleJob(
         break;
       }
 
-      await handleGuildCommandJob(client, job, workerId, logger);
+      await handleGuildCommandJob(client, job, workerId, logger, services);
       break;
     }
   }
@@ -239,6 +255,7 @@ async function handleGuildCommandJob(
   job: GuildCommandJob,
   workerId: string,
   logger: ReturnType<typeof createLogger>,
+  services: WorkerServices,
 ): Promise<void> {
   logger.info(
     {
@@ -272,6 +289,21 @@ async function handleGuildCommandJob(
       { err: error, workerId, jobId: job.id, guildId: job.guildId, textChannelId: job.textChannelId },
       'Channel is not text-based for guild command job',
     );
+    return;
+  }
+
+  const musicResponse = await services.music.handle(job, textChannel);
+  if (musicResponse.handled) {
+    if (musicResponse.payload) {
+      try {
+        await textChannel.send(musicResponse.payload);
+      } catch (error) {
+        logger.error(
+          { err: error, workerId, jobId: job.id, guildId: job.guildId, textChannelId: job.textChannelId },
+          'Failed to send music response message',
+        );
+      }
+    }
     return;
   }
 
@@ -347,4 +379,8 @@ function ensureTextChannel(channel: unknown): TextBasedChannel & { send: TextSen
   }
 
   return candidate as TextBasedChannel & { send: TextSendMethod };
+}
+
+interface WorkerServices {
+  music: MusicPlaybackService;
 }
