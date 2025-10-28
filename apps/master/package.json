@@ -8,7 +8,7 @@
     "build": "tsc --project tsconfig.json",
     "watch": "tsc --project tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "echo \"No tests yet\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@anankor/config": "workspace:*",

@@ -6,8 +6,16 @@ export interface RedisClient {
   set(key: string, value: string, ...args: unknown[]): Promise<'OK' | null>;
   expire(key: string, seconds: number): Promise<number>;
   del(key: string): Promise<number>;
+  xadd(key: string, id: string, ...args: Array<string | number>): Promise<string>;
+  xgroup(command: 'CREATE', key: string, group: string, id: string, ...args: string[]): Promise<'OK'>;
+  xreadgroup(...args: Array<string | number>): Promise<RawXReadGroupResponse | null>;
+  xack(key: string, group: string, id: string): Promise<number>;
   disconnect(): void;
 }
+
+type RawStreamEntry = [string, string[]];
+type RawStreamResponse = [string, RawStreamEntry[]];
+type RawXReadGroupResponse = RawStreamResponse[];
 
 const RedisCtor = IORedis as unknown as {
   new (...args: unknown[]): RedisClient;
@@ -83,3 +91,5 @@ function buildTokenClaimKey(token: string): string {
 export function generateJobId(): string {
   return randomUUID();
 }
+
+export * from './jobs.js';

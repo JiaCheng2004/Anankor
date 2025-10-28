@@ -11,6 +11,8 @@
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
+    "@anankor/schemas": "workspace:*",
+    "@anankor/storage": "workspace:*",
     "ioredis": "5.8.2",
     "nanoid": "5.0.7"
   }

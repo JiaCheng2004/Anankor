@@ -1,5 +1,7 @@
 # Lavalink Integration
 
+Music playback remains one of the two pillars of the project alongside cooperative game sessions. The notes below focus on the audio path specifically.
+
 - Lavalink runs as a sidecar container managed by Docker Compose.
 - Workers connect using the `@anankor/music` package which wraps the `lavalink-client` manager.
 - Reconnect logic should monitor node health, resume or recreate players, and surface metrics for connection status and request latency.
