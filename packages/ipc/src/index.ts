@@ -56,12 +56,10 @@ export async function claimWorkerToken(
       continue;
     }
 
-    const heartbeat = setInterval(async () => {
-      try {
-        await redis.expire(key, ttlSeconds);
-      } catch (error) {
+    const heartbeat = setInterval(() => {
+      void redis.expire(key, ttlSeconds).catch((error) => {
         console.error('Failed to extend worker token claim heartbeat', error);
-      }
+      });
     }, heartbeatIntervalSeconds * 1000);
 
     heartbeat.unref?.();

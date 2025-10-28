@@ -15,7 +15,7 @@ export interface TelemetryHandle {
   shutdown: () => Promise<void>;
 }
 
-export async function bootstrapTelemetry(options: TelemetryOptions): Promise<TelemetryHandle> {
+export function bootstrapTelemetry(options: TelemetryOptions): Promise<TelemetryHandle> {
   const resource = new Resource({
     [SemanticResourceAttributes.SERVICE_NAME]: options.serviceName,
     [SemanticResourceAttributes.SERVICE_NAMESPACE]: options.serviceNamespace ?? 'anankor',
@@ -28,14 +28,14 @@ export async function bootstrapTelemetry(options: TelemetryOptions): Promise<Tel
     : undefined;
 
   const sdk = new NodeSDK({
-    resource: resource as any,
-    traceExporter: traceExporter as any,
+    resource,
+    traceExporter,
     instrumentations: [getNodeAutoInstrumentations()],
   });
 
-  await sdk.start();
+  sdk.start();
 
-  return {
+  return Promise.resolve({
     shutdown: () => sdk.shutdown(),
-  };
+  });
 }

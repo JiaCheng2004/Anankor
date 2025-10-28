@@ -17,14 +17,10 @@ const masterSchema = baseSchema.extend({
   DISCORD_MASTER_TOKEN: z.string().min(1, 'DISCORD_MASTER_TOKEN is required'),
 });
 
-type MasterEnv = z.infer<typeof masterSchema>;
-
 const workerSchema = baseSchema.extend({
   CLAIM_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   WORKER_TOKEN_PREFIX: z.string().default('DISCORD_WORKER_TOKEN_'),
 });
-
-type WorkerEnv = z.infer<typeof workerSchema>;
 
 export interface MasterConfig {
   environment: BaseEnv['NODE_ENV'];
