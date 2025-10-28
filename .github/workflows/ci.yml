@@ -28,6 +28,11 @@ jobs:
         with:
           version: 10.19.0
 
+      - name: Ensure pnpm store exists
+        run: |
+          STORE_PATH="$(pnpm store path --silent)"
+          mkdir -p "$STORE_PATH"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
