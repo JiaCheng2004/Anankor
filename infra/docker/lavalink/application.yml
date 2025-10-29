@@ -1,22 +1,35 @@
 server:
   port: 2333
   address: 0.0.0.0
-  password: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}
-  sources:
-    youtube: true
-    bandcamp: true
-    soundcloud: true
-    twitch: true
-    vimeo: true
-    http: true
-    local: false
-  filters:
-    volume: true
 
 lavalink:
   server:
     password: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}
     player-update-interval: 5
+    sources:
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    filters:
+      volume: true
     soundcloud:
       client-id: ''
-  plugins: []
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.15.0"
+      snapshot: false
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - WEB
+      - WEB_REMIX
+      - TVHTML5
+      - TVHTML5_SIMPLY_EMBEDDED_PLAYER

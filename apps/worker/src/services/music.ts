@@ -64,10 +64,13 @@ interface LavalinkPlayerLike {
     clear?: () => void;
     remove?: (position: number) => LavalinkTrackLike | undefined;
   };
-  connect?: (voiceChannelId: string, options?: Record<string, unknown>) => Promise<void> | void;
+  connect?: (voiceChannelId?: string, options?: Record<string, unknown>) => Promise<void> | void;
   disconnect?: () => Promise<void> | void;
   destroy?: () => Promise<void> | void;
-  play?: (track: LavalinkTrackLike, options?: Record<string, unknown>) => Promise<void> | void;
+  play?: (
+    trackOrOptions?: LavalinkTrackLike | LavalinkPlayPayload | Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ) => Promise<void> | void;
   start?: (track: LavalinkTrackLike, options?: Record<string, unknown>) => Promise<void> | void;
   stop?: () => Promise<void> | void;
   pause?: (paused?: boolean) => Promise<void> | void;
@@ -89,7 +92,15 @@ interface LavalinkManagerLike {
   once?: (event: string, listener: (...args: unknown[]) => void) => void;
   nodeManager?: {
     connectAll?: () => Promise<number> | number;
+    nodes?: Map<string, unknown> | Record<string, unknown>;
   } & Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface LavalinkNodeLike {
+  id?: string;
+  connected?: boolean | string;
+  sessionId?: string;
   [key: string]: unknown;
 }
 
@@ -97,6 +108,15 @@ type QueueEntry = {
   track: LavalinkTrackLike;
   requestedBy: CommandRequester;
   enqueuedAt: number;
+};
+
+type LavalinkPlayPayload = {
+  track: {
+    encoded?: string;
+    identifier?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 interface GuildPlaybackState {
@@ -245,11 +265,15 @@ export class MusicPlaybackService {
 
       if (typeof manager.nodeManager?.connectAll === 'function') {
         try {
-          await manager.nodeManager.connectAll();
+          const connected = await manager.nodeManager.connectAll();
+          const totalNodes = manager.nodeManager.nodes?.size ?? 0;
+          this.logger.info({ connectedNodes: connected, totalNodes }, 'Initialised Lavalink node connections');
         } catch (error) {
           this.logger.error({ err: error }, 'Failed to connect all Lavalink nodes');
         }
       }
+
+      await this.awaitNodeAvailability(manager);
 
       this.managerReady = true;
       this.managerReadyResolve?.();
@@ -353,6 +377,9 @@ export class MusicPlaybackService {
     }
 
     let resolvedTracks = loadResult.tracks;
+    if (loadResult.loadType === 'search' && resolvedTracks.length > 0) {
+      resolvedTracks = [resolvedTracks[0]];
+    }
     if (
       typeof loadResult.selectedTrackIndex === 'number' &&
       loadResult.selectedTrackIndex >= 0 &&
@@ -631,6 +658,86 @@ export class MusicPlaybackService {
     }
   }
 
+  private async awaitNodeAvailability(manager: LavalinkManagerLike): Promise<void> {
+    const MAX_WAIT_MS = 5_000;
+    const POLL_INTERVAL_MS = 250;
+
+    const start = Date.now();
+    while (Date.now() - start < MAX_WAIT_MS) {
+      const nodes = this.collectNodes(manager);
+      if (nodes.length > 0) {
+        const ready = nodes.some((node) => this.isNodeReady(node));
+        if (ready) {
+          return;
+        }
+        this.logger.debug(
+          nodes.map((node) => this.describeNodeState(node)),
+          'Lavalink nodes present but not yet ready',
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    this.logger.warn('Lavalink nodes did not report ready status within timeout window');
+  }
+
+  private collectNodes(manager: LavalinkManagerLike): LavalinkNodeLike[] {
+    const nodes: LavalinkNodeLike[] = [];
+    const rawNodes = manager.nodeManager?.nodes;
+    if (rawNodes instanceof Map) {
+      for (const node of rawNodes.values()) {
+        nodes.push(node as LavalinkNodeLike);
+      }
+    } else if (rawNodes && typeof rawNodes === 'object') {
+      for (const value of Object.values(rawNodes)) {
+        nodes.push(value as LavalinkNodeLike);
+      }
+    }
+    return nodes;
+  }
+
+  private isNodeReady(node: LavalinkNodeLike): boolean {
+    const connected = (node as { connected?: boolean | string }).connected;
+    if (typeof connected === 'boolean') {
+      return connected;
+    }
+
+    if (typeof connected === 'string' && connected.length > 0) {
+      const normalised = connected.toLowerCase();
+      if (normalised === 'connected' || normalised === 'ready') {
+        return true;
+      }
+    }
+
+    const isAlive = (node as { isAlive?: boolean }).isAlive;
+    if (typeof isAlive === 'boolean') {
+      return isAlive;
+    }
+
+    const sessionId = (node as { sessionId?: string | null }).sessionId;
+    if (typeof sessionId === 'string' && sessionId.trim().length > 0) {
+      return true;
+    }
+
+    const state = (node as { state?: string; status?: string }).state ?? (node as { status?: string }).status;
+    if (typeof state === 'string' && state.length > 0) {
+      const normalised = state.toLowerCase();
+      return normalised === 'connected' || normalised === 'ready';
+    }
+
+    return false;
+  }
+
+  private describeNodeState(node: LavalinkNodeLike): Record<string, unknown> {
+    return {
+      id: (node as { id?: unknown }).id ?? null,
+      connected: (node as { connected?: unknown }).connected ?? null,
+      isAlive: (node as { isAlive?: unknown }).isAlive ?? null,
+      sessionId: (node as { sessionId?: unknown }).sessionId ?? null,
+      state: (node as { state?: unknown }).state ?? null,
+      status: (node as { status?: unknown }).status ?? null,
+    };
+  }
+
   private async getOrCreateGuildState(
     guildId: string,
     voiceChannelId: string,
@@ -743,14 +850,49 @@ export class MusicPlaybackService {
 
     const player = state.player;
     const currentChannel = typeof player.voiceChannelId === 'string' ? player.voiceChannelId : null;
+    const playerOptions = (player as { options?: { voiceChannelId?: string; selfDeaf?: boolean; selfMute?: boolean } }).options;
+    if (playerOptions) {
+      playerOptions.voiceChannelId = voiceChannelId;
+      playerOptions.selfDeaf = true;
+      playerOptions.selfMute = false;
+    }
 
     if (currentChannel === voiceChannelId) {
       state.voiceChannelId = voiceChannelId;
       return;
     }
 
-    if (typeof player.connect === 'function') {
-      await Promise.resolve(player.connect(voiceChannelId, { deafened: true, muted: false }));
+    const connectOptions = { voiceChannelId, selfDeaf: true, selfMute: false };
+
+    if (!currentChannel) {
+      if (typeof player.connect === 'function') {
+        try {
+          await Promise.resolve(player.connect());
+        } catch (error) {
+          this.logger.warn({ err: error, guildId: state.player.guildId ?? state.voiceChannelId }, 'player.connect() failed, attempting fallback');
+          if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
+            await Promise.resolve(
+              (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(
+                connectOptions,
+              ),
+            );
+          } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
+            await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
+          }
+        }
+      } else if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
+        await Promise.resolve(
+          (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(connectOptions),
+        );
+      } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
+        await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
+      }
+    } else if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
+      await Promise.resolve(
+        (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(connectOptions),
+      );
+    } else if (typeof player.connect === 'function') {
+      await Promise.resolve(player.connect());
     } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
       await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
     }
@@ -760,6 +902,19 @@ export class MusicPlaybackService {
 
   private async playTrack(player: LavalinkPlayerLike, track: LavalinkTrackLike): Promise<void> {
     if (typeof player.play === 'function') {
+      const playOptions = this.buildPlayOptions(track);
+      if (playOptions) {
+        try {
+          await Promise.resolve(player.play(playOptions));
+          return;
+        } catch (error) {
+          this.logger.debug(
+            { err: error, track: formatTrackTitle(track) },
+            'Player.play with options payload threw, attempting legacy signature',
+          );
+        }
+      }
+
       await Promise.resolve(player.play(track));
       return;
     }
@@ -875,6 +1030,46 @@ export class MusicPlaybackService {
     };
   }
 
+  private buildPlayOptions(track: LavalinkTrackLike): LavalinkPlayPayload | null {
+    const encoded = this.resolveEncodedTrack(track);
+    const identifier = this.resolveTrackIdentifier(track);
+
+    if (!encoded && !identifier) {
+      return null;
+    }
+
+    const payload: LavalinkPlayPayload = {
+      track: {},
+    };
+
+    if (encoded) {
+      payload.track.encoded = encoded;
+    }
+    if (identifier) {
+      payload.track.identifier = identifier;
+    }
+
+    return payload;
+  }
+
+  private resolveEncodedTrack(track: LavalinkTrackLike): string | null {
+    if (track && typeof (track as { encoded?: unknown }).encoded === 'string') {
+      return (track as { encoded: string }).encoded;
+    }
+    if (track && typeof (track as { track?: unknown }).track === 'string') {
+      return (track as { track: string }).track;
+    }
+    return null;
+  }
+
+  private resolveTrackIdentifier(track: LavalinkTrackLike): string | null {
+    const info = track && typeof track === 'object' ? (track as { info?: unknown }).info : null;
+    if (info && typeof (info as { identifier?: unknown }).identifier === 'string') {
+      return (info as { identifier: string }).identifier;
+    }
+    return null;
+  }
+
   private async loadTracks(query: string): Promise<TrackLoadResult> {
     const node = this.nodes[0];
     if (!node) {
@@ -897,21 +1092,53 @@ export class MusicPlaybackService {
       throw new Error(`Lavalink loadtracks failed with status ${response.status}`);
     }
 
-    const data = (await response.json()) as Partial<TrackLoadResult> & {
+    const json = (await response.json()) as {
       loadType?: string;
       playlistInfo?: { name?: string; selectedTrack?: number };
       tracks?: LavalinkTrackLike[];
-      data?: {
-        loadType?: string;
-        playlistInfo?: { name?: string; selectedTrack?: number };
-        tracks?: LavalinkTrackLike[];
-      };
+      data?: unknown;
     };
 
-    const payload = data.data ?? data;
-    const loadType = payload?.loadType ?? data.loadType ?? 'empty';
-    const tracks = Array.isArray(payload?.tracks) ? payload.tracks : Array.isArray(data.tracks) ? data.tracks : [];
-    const playlistInfo = payload?.playlistInfo ?? data.playlistInfo;
+    const payload = json.data ?? json;
+    const payloadIsArray = Array.isArray(payload);
+
+    let payloadLoadType: string | undefined;
+    if (!payloadIsArray && payload && typeof payload === 'object' && 'loadType' in payload) {
+      const candidate = (payload as { loadType?: unknown }).loadType;
+      if (typeof candidate === 'string') {
+        payloadLoadType = candidate;
+      }
+    }
+    const loadType = payloadLoadType ?? json.loadType ?? 'empty';
+
+    let tracks: LavalinkTrackLike[] = [];
+    if (payloadIsArray) {
+      tracks = payload as LavalinkTrackLike[];
+    } else if (payload && typeof payload === 'object' && Array.isArray((payload as { tracks?: unknown }).tracks)) {
+      tracks = (payload as { tracks: LavalinkTrackLike[] }).tracks;
+    } else if (Array.isArray(json.tracks)) {
+      tracks = json.tracks;
+    }
+
+    let playlistInfo: { name?: string; selectedTrack?: number } | undefined;
+    if (!payloadIsArray && payload && typeof payload === 'object' && 'playlistInfo' in payload) {
+      const candidate = (payload as { playlistInfo?: unknown }).playlistInfo;
+      if (candidate && typeof candidate === 'object') {
+        playlistInfo = candidate as { name?: string; selectedTrack?: number };
+      }
+    }
+    if (!playlistInfo && json.playlistInfo) {
+      playlistInfo = json.playlistInfo;
+    }
+
+    this.logger.debug(
+      {
+        loadType,
+        trackCount: tracks.length,
+        payloadType: payloadIsArray ? 'array' : typeof payload,
+      },
+      'Parsed Lavalink loadtracks response',
+    );
 
     return {
       loadType,
