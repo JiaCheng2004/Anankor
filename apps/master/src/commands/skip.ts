@@ -8,6 +8,7 @@ import {
   getVoiceChannelIdFromInteraction,
   getVoiceChannelIdFromMessage,
   replyToInteraction,
+  resolveSchedulerErrorMessage,
 } from './utils.js';
 
 const COMMAND_NAME = 'skip';
@@ -78,6 +79,11 @@ export function createSkipCommand(): ChatInputCommand {
         );
         await replyToInteraction(interaction, count > 1 ? `Skipping ${count} tracks.` : 'Skipping the current track.');
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await replyToInteraction(interaction, schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.skip job',
@@ -134,6 +140,11 @@ export function createSkipCommand(): ChatInputCommand {
         );
         await message.reply(count > 1 ? `Skipping ${count} tracks.` : 'Skipping the current track.');
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await message.reply(schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.skip job from prefix command',

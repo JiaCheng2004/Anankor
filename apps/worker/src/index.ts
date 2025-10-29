@@ -2,7 +2,19 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { loadWorkerConfig } from '@anankor/config';
 import { createLogger } from '@anankor/logger';
 import { bootstrapTelemetry } from '@anankor/telemetry';
-import { acknowledgeJob, claimWorkerToken, createRedisClient, decodeJobEntry, ensureJobConsumerGroup, readJobStream } from '@anankor/ipc';
+import {
+  acknowledgeJob,
+  buildWorkerJobStreamKey,
+  claimWorkerToken,
+  createRedisClient,
+  decodeJobEntry,
+  ensureJobConsumerGroup,
+  readJobStream,
+  JOB_STREAM_KEY,
+  registerWorkerInPool,
+  refreshWorkerPresence,
+  unregisterWorkerFromPool,
+} from '@anankor/ipc';
 import type { GuildCommandJobBase, JobEnvelope, PingRespondJob } from '@anankor/schemas';
 import type { TextBasedChannel, TextChannel } from 'discord.js';
 import { MusicPlaybackService } from './services/music.js';
@@ -26,6 +38,17 @@ async function main() {
   const redis = createRedisClient(config.redisUrl);
   const claim = await claimWorkerToken(redis, config.workerTokens);
   await ensureJobConsumerGroup(redis, JOB_CONSUMER_GROUP);
+
+  const workerStreamKey = buildWorkerJobStreamKey(claim.workerId);
+  await ensureJobConsumerGroup(redis, JOB_CONSUMER_GROUP, workerStreamKey);
+  await registerWorkerInPool(redis, claim.workerId);
+
+  const presenceInterval = setInterval(() => {
+    void refreshWorkerPresence(redis, claim.workerId).catch((error: unknown) => {
+      logger.warn({ err: error, workerId: claim.workerId }, 'Failed to refresh worker presence heartbeat');
+    });
+  }, 10000);
+  presenceInterval.unref?.();
 
   logger.info({ workerId: claim.workerId }, 'Worker claimed token');
 
@@ -63,7 +86,7 @@ async function main() {
         const entries = await readJobStream(redis, JOB_CONSUMER_GROUP, claim.workerId, {
           blockMs: JOB_BLOCK_MS,
           count: JOB_BATCH_SIZE,
-        });
+        }, [JOB_STREAM_KEY, workerStreamKey]);
 
     if (entries.length === 0) {
       continue;
@@ -73,11 +96,11 @@ async function main() {
           try {
             const job = decodeJobEntry(entry);
             await handleJob(client, job, claim.workerId, logger, services);
-            await acknowledgeJob(redis, JOB_CONSUMER_GROUP, entry.id);
+            await acknowledgeJob(redis, JOB_CONSUMER_GROUP, entry);
           } catch (error) {
             logger.error({ err: error, workerId: claim.workerId, entryId: entry.id }, 'Failed processing job entry');
             try {
-              await acknowledgeJob(redis, JOB_CONSUMER_GROUP, entry.id);
+              await acknowledgeJob(redis, JOB_CONSUMER_GROUP, entry);
             } catch (ackError) {
               logger.error(
                 { err: ackError, workerId: claim.workerId, entryId: entry.id },
@@ -103,12 +126,16 @@ async function main() {
   const shutdown = async () => {
     logger.info('Worker shutting down');
     clearInterval(keepAlive);
+    clearInterval(presenceInterval);
     jobLoopController.abort();
     await jobLoopPromise.catch(() => undefined);
-    await musicService.shutdown().catch((error) => {
+    await musicService.shutdown().catch((error: unknown) => {
       logger.warn({ err: error }, 'Music playback service shutdown reported error');
     });
     await client.destroy();
+    await unregisterWorkerFromPool(redis, claim.workerId).catch((error: unknown) => {
+      logger.warn({ err: error, workerId: claim.workerId }, 'Failed to unregister worker from pool');
+    });
     await claim.release();
     await telemetry.shutdown();
     redis.disconnect();
@@ -269,6 +296,15 @@ async function handleGuildCommandJob(
     },
     'Handling guild command job (placeholder)',
   );
+
+  const targetWorkerId = (job as { targetWorkerId?: string }).targetWorkerId;
+  if (typeof targetWorkerId === 'string' && targetWorkerId.length > 0 && targetWorkerId !== workerId) {
+    logger.debug(
+      { workerId, jobId: job.id, targetWorkerId, guildId: job.guildId },
+      'Ignoring guild command job targeted at another worker',
+    );
+    return;
+  }
 
   let channel: Awaited<ReturnType<typeof client.channels.fetch>>;
   try {

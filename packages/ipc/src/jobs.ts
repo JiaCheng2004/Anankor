@@ -5,9 +5,11 @@ import type { RedisClient } from './index.js';
 const JOB_PAYLOAD_FIELD = 'payload';
 
 export const JOB_STREAM_KEY = STREAMS.jobs;
+export const WORKER_JOB_STREAM_PREFIX = `${STREAMS.jobs}:worker`;
 
 export interface JobStreamEntry {
   id: string;
+  stream: string;
   payload: string;
 }
 
@@ -19,14 +21,30 @@ export interface ReadJobOptions {
 type RawStreamEntry = [string, string[]];
 type RawStreamResponse = [string, RawStreamEntry[]];
 
-export async function publishJob(redis: RedisClient, job: JobEnvelope): Promise<string> {
-  const payload = JSON.stringify(job);
-  return redis.xadd(JOB_STREAM_KEY, '*', JOB_PAYLOAD_FIELD, payload);
+export function buildWorkerJobStreamKey(workerId: string): string {
+  return `${WORKER_JOB_STREAM_PREFIX}:${workerId}`;
 }
 
-export async function ensureJobConsumerGroup(redis: RedisClient, group: string): Promise<void> {
+export async function publishJob(
+  redis: RedisClient,
+  job: JobEnvelope,
+  streamKey: string = JOB_STREAM_KEY,
+): Promise<string> {
+  const payload = JSON.stringify(job);
+  const entryId = await redis.xadd(streamKey, '*', JOB_PAYLOAD_FIELD, payload);
+  if (typeof entryId !== 'string' || entryId.length === 0) {
+    throw new Error('Redis xadd did not return an entry id');
+  }
+  return entryId;
+}
+
+export async function ensureJobConsumerGroup(
+  redis: RedisClient,
+  group: string,
+  streamKey: string = JOB_STREAM_KEY,
+): Promise<void> {
   try {
-    await redis.xgroup('CREATE', JOB_STREAM_KEY, group, '0', 'MKSTREAM');
+    await redis.xgroup('CREATE', streamKey, group, '0', 'MKSTREAM');
   } catch (error) {
     if (!(error instanceof Error)) {
       throw error;
@@ -40,7 +58,7 @@ export async function ensureJobConsumerGroup(redis: RedisClient, group: string):
 function normaliseEntries(response: RawStreamResponse[]): JobStreamEntry[] {
   const entries: JobStreamEntry[] = [];
 
-  for (const [, streamEntries] of response) {
+  for (const [streamKey, streamEntries] of response) {
     for (const [entryId, fields] of streamEntries) {
       const record: Record<string, string> = {};
       for (let index = 0; index < fields.length; index += 2) {
@@ -52,6 +70,7 @@ function normaliseEntries(response: RawStreamResponse[]): JobStreamEntry[] {
       }
       entries.push({
         id: entryId,
+        stream: streamKey,
         payload: record[JOB_PAYLOAD_FIELD] ?? '',
       });
     }
@@ -65,7 +84,9 @@ export async function readJobStream(
   group: string,
   consumer: string,
   options: ReadJobOptions = {},
+  streamKeys: string | string[] = JOB_STREAM_KEY,
 ): Promise<JobStreamEntry[]> {
+  const streams = Array.isArray(streamKeys) ? streamKeys : [streamKeys];
   const args: Array<string | number> = ['GROUP', group, consumer];
 
   if (typeof options.count === 'number' && options.count > 0) {
@@ -76,9 +97,17 @@ export async function readJobStream(
     args.push('BLOCK', options.blockMs);
   }
 
-  args.push('STREAMS', JOB_STREAM_KEY, '>');
+  args.push('STREAMS');
+  for (const stream of streams) {
+    args.push(stream);
+  }
+  for (let index = 0; index < streams.length; index += 1) {
+    args.push('>');
+  }
 
-  const response = (await redis.xreadgroup(...args)) as RawStreamResponse[] | null;
+  const response = (await (redis.xreadgroup as (...params: (string | number)[]) => Promise<RawStreamResponse[] | null>)(
+    ...args,
+  )) as RawStreamResponse[] | null;
 
   if (!response) {
     return [];
@@ -92,6 +121,6 @@ export function decodeJobEntry(entry: JobStreamEntry): JobEnvelope {
   return jobEnvelopeSchema.parse(parsed);
 }
 
-export async function acknowledgeJob(redis: RedisClient, group: string, id: string): Promise<void> {
-  await redis.xack(JOB_STREAM_KEY, group, id);
+export async function acknowledgeJob(redis: RedisClient, group: string, entry: JobStreamEntry): Promise<void> {
+  await redis.xack(entry.stream, group, entry.id);
 }

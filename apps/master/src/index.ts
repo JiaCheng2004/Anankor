@@ -4,6 +4,7 @@ import { createLogger } from '@anankor/logger';
 import { bootstrapTelemetry } from '@anankor/telemetry';
 import { createInteractionRouter } from '@anankor/discord';
 import { createRedisClient, publishJob } from '@anankor/ipc';
+import { MusicScheduler, MusicSchedulerError } from './services/musicScheduler.js';
 import { createChatInputCommands, type ChatInputCommand, type CommandContext } from './commands/index.js';
 
 const DEFAULT_PREFIX = '!';
@@ -20,9 +21,33 @@ async function main() {
 
   const redis = createRedisClient(config.redisUrl);
 
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
+
+  const musicScheduler = new MusicScheduler(redis, client, logger);
+
   const commandContext: CommandContext = {
     logger,
-    enqueueJob: async (job) => publishJob(redis, job),
+    enqueueJob: async (job) => {
+      try {
+        const scheduledId = await musicScheduler.trySchedule(job);
+        if (scheduledId) {
+          return scheduledId;
+        }
+      } catch (error) {
+        if (error instanceof MusicSchedulerError) {
+          throw error;
+        }
+        throw error;
+      }
+      return publishJob(redis, job);
+    },
   };
 
   const commandRouter = createInteractionRouter();
@@ -40,15 +65,6 @@ async function main() {
       }
       await command.execute(interaction, commandContext);
     });
-  });
-
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.GuildVoiceStates,
-      GatewayIntentBits.MessageContent,
-    ],
   });
 
   client.once('ready', async (readyClient) => {

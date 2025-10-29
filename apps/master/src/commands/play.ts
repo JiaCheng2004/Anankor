@@ -8,6 +8,7 @@ import {
   getVoiceChannelIdFromInteraction,
   getVoiceChannelIdFromMessage,
   replyToInteraction,
+  resolveSchedulerErrorMessage,
 } from './utils.js';
 
 const COMMAND_NAME = 'play';
@@ -71,6 +72,11 @@ export function createPlayCommand(): ChatInputCommand {
         );
         await replyToInteraction(interaction, `Queued **${escapeMarkdown(query)}** for playback.`);
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await replyToInteraction(interaction, schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.play job',
@@ -126,6 +132,11 @@ export function createPlayCommand(): ChatInputCommand {
         );
         await message.reply(`Queued **${escapeMarkdown(query)}** for playback.`);
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await message.reply(schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.play job from prefix command',

@@ -1,5 +1,6 @@
 import type { ChatInputCommandInteraction, Message } from 'discord.js';
 import type { CommandRequester, CommandSource } from '@anankor/schemas';
+import { MusicSchedulerError } from '../services/musicScheduler.js';
 
 export interface CommandJobMetadata {
   guildId: string;
@@ -84,4 +85,21 @@ export async function replyToInteraction(
   } else {
     await interaction.reply(payload);
   }
+}
+
+export function resolveSchedulerErrorMessage(error: unknown): string | null {
+  if (error instanceof MusicSchedulerError) {
+    return error.message;
+  }
+  if (
+    error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    (error as { name: string }).name === 'MusicSchedulerError' &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return null;
 }

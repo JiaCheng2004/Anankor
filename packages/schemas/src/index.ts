@@ -5,6 +5,10 @@ export const jobBaseSchema = z.object({
   type: z.string().min(1),
   idempotencyKey: z.string().min(1),
   createdAt: z.coerce.date(),
+  sessionKey: z.string().min(3).optional(),
+  targetWorkerId: z.string().min(1).optional(),
+  queueEntryId: z.string().min(1).optional(),
+  queuePosition: z.number().int().min(1).optional(),
 });
 
 const commandSourceSchema = z.enum(['interaction', 'prefix']);
@@ -54,6 +58,7 @@ export const musicStopJobSchema = guildCommandJobBaseSchema.extend({
 
 export const musicQueueJobSchema = guildCommandJobBaseSchema.extend({
   type: z.literal('music.queue'),
+  voiceChannelId: z.string().min(1),
   page: z.number().int().min(1).optional(),
 });
 

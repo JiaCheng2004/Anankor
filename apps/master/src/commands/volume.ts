@@ -8,6 +8,7 @@ import {
   getVoiceChannelIdFromInteraction,
   getVoiceChannelIdFromMessage,
   replyToInteraction,
+  resolveSchedulerErrorMessage,
 } from './utils.js';
 
 const COMMAND_NAME = 'volume';
@@ -74,6 +75,11 @@ export function createVolumeCommand(): ChatInputCommand {
             : 'Retrieving the current volume...',
         );
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await replyToInteraction(interaction, schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.volume job',
@@ -127,6 +133,11 @@ export function createVolumeCommand(): ChatInputCommand {
           level !== undefined ? `Setting volume to ${level}%.` : 'Retrieving the current volume...',
         );
       } catch (error) {
+        const schedulerMessage = resolveSchedulerErrorMessage(error);
+        if (schedulerMessage) {
+          await message.reply(schedulerMessage);
+          return;
+        }
         context.logger.error(
           { err: error, guildId: job.guildId, voiceChannelId: job.voiceChannelId, jobId: job.id },
           'Failed to enqueue music.volume job from prefix command',
