@@ -82,7 +82,9 @@ interface LavalinkPlayerLike {
 
 interface LavalinkManagerLike {
   connect?: () => Promise<void> | void;
+  init?: (data: { id: string; username?: string }) => Promise<unknown> | unknown;
   updateVoiceState?: (data: unknown) => void;
+  sendRawData?: (data: unknown) => Promise<void> | void;
   createPlayer?: (...args: unknown[]) => LavalinkPlayerLike;
   getPlayer?: (guildId: string) => LavalinkPlayerLike | undefined;
   destroyPlayer?: (guildId: string) => void;
@@ -154,6 +156,7 @@ export class MusicPlaybackService {
   private managerInitialising = false;
 
   private readonly rawListener: (packet: unknown) => void;
+  private warnedMissingVoiceStateHandler = false;
   private readonly onTrackEndListener = (...args: unknown[]): void => {
     const [player, track, payload] = args as [LavalinkPlayerLike, LavalinkTrackLike, unknown?];
     void this.handleTrackEnd(player, track, payload);
@@ -195,7 +198,30 @@ export class MusicPlaybackService {
     this.resetManagerReadyPromise();
 
     this.rawListener = (packet: unknown) => {
-      this.manager?.updateVoiceState?.(packet);
+      const manager = this.manager;
+      if (!manager) {
+        return;
+      }
+
+      try {
+        if (typeof manager.sendRawData === 'function') {
+          void manager.sendRawData(packet);
+          return;
+        }
+
+        if (typeof manager.updateVoiceState === 'function') {
+          manager.updateVoiceState(packet);
+          return;
+        }
+      } catch (error) {
+        this.logger.warn({ err: error }, 'Failed to forward gateway payload to Lavalink manager');
+        return;
+      }
+
+      if (!this.warnedMissingVoiceStateHandler) {
+        this.warnedMissingVoiceStateHandler = true;
+        this.logger.warn('Lavalink manager does not expose a voice state handler (sendRawData/updateVoiceState)');
+      }
     };
     this.client.on('raw', this.rawListener);
   }
@@ -205,6 +231,7 @@ export class MusicPlaybackService {
       this.managerReadyResolve = resolve;
       this.managerReadyReject = reject;
     });
+    this.warnedMissingVoiceStateHandler = false;
   }
 
   public async onClientReady(): Promise<void> {
@@ -255,6 +282,14 @@ export class MusicPlaybackService {
 
       if (manager.nodeManager && typeof manager.nodeManager.on === 'function') {
         manager.nodeManager.on('error', this.onNodeManagerErrorListener);
+      }
+
+      if (typeof manager.init === 'function' && this.client.user) {
+        try {
+          await Promise.resolve(manager.init({ id: this.client.user.id, username: this.client.user.username }));
+        } catch (error) {
+          this.logger.error({ err: error }, 'Failed to run Lavalink manager init');
+        }
       }
 
       try {
@@ -850,6 +885,7 @@ export class MusicPlaybackService {
 
     const player = state.player;
     const currentChannel = typeof player.voiceChannelId === 'string' ? player.voiceChannelId : null;
+    const playerGuildId = (player as { guildId?: string }).guildId ?? state.voiceChannelId;
     const playerOptions = (player as { options?: { voiceChannelId?: string; selfDeaf?: boolean; selfMute?: boolean } }).options;
     if (playerOptions) {
       playerOptions.voiceChannelId = voiceChannelId;
@@ -859,45 +895,48 @@ export class MusicPlaybackService {
 
     if (currentChannel === voiceChannelId) {
       state.voiceChannelId = voiceChannelId;
+      await this.invokePlayerConnect(player, playerGuildId);
       return;
     }
 
     const connectOptions = { voiceChannelId, selfDeaf: true, selfMute: false };
 
     if (!currentChannel) {
-      if (typeof player.connect === 'function') {
-        try {
-          await Promise.resolve(player.connect());
-        } catch (error) {
-          this.logger.warn({ err: error, guildId: state.player.guildId ?? state.voiceChannelId }, 'player.connect() failed, attempting fallback');
-          if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
-            await Promise.resolve(
-              (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(
-                connectOptions,
-              ),
-            );
-          } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
-            await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
-          }
-        }
-      } else if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
-        await Promise.resolve(
-          (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(connectOptions),
-        );
-      } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
-        await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
+      const connected = await this.invokePlayerConnect(player, playerGuildId);
+      if (connected) {
+        state.voiceChannelId = voiceChannelId;
+        return;
       }
-    } else if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
+    }
+
+    if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
       await Promise.resolve(
         (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(connectOptions),
       );
-    } else if (typeof player.connect === 'function') {
-      await Promise.resolve(player.connect());
+    } else if (await this.invokePlayerConnect(player, playerGuildId)) {
+      // connect handled inside invokePlayerConnect
     } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
       await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
     }
 
     state.voiceChannelId = voiceChannelId;
+  }
+
+  /**
+   * Attempt to issue an op:4 voice update via the Lavalink player, logging failures once.
+   */
+  private async invokePlayerConnect(player: LavalinkPlayerLike, guildId: string | null): Promise<boolean> {
+    if (typeof player.connect !== 'function') {
+      return false;
+    }
+
+    try {
+      await Promise.resolve(player.connect());
+      return true;
+    } catch (error) {
+      this.logger.warn({ err: error, guildId }, 'player.connect() failed');
+      return false;
+    }
   }
 
   private async playTrack(player: LavalinkPlayerLike, track: LavalinkTrackLike): Promise<void> {
@@ -1182,6 +1221,15 @@ export class MusicPlaybackService {
     if (!shard) {
       this.logger.debug({ guildId }, 'Unable to forward gateway payload: shard not found');
       return;
+    }
+
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      'op' in payload &&
+      (payload as { op: number }).op === 4
+    ) {
+      this.logger.info({ guildId, voicePayload: payload }, 'Dispatching voice state update payload to Discord');
     }
 
     shard.send(payload as Record<string, unknown>);
