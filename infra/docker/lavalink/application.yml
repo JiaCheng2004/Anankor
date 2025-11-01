@@ -3,6 +3,7 @@ server:
   address: 0.0.0.0
 
 lavalink:
+  pluginsDir: "./plugins"
   server:
     password: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}
     player-update-interval: 5
@@ -18,9 +19,6 @@ lavalink:
       volume: true
     soundcloud:
       client-id: ''
-  plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.15.0"
-      snapshot: false
 
 plugins:
   youtube:
@@ -29,7 +27,36 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
+      - ANDROID_VR
       - WEB
-      - WEB_REMIX
-      - TVHTML5
-      - TVHTML5_SIMPLY_EMBEDDED_PLAYER
+      - WEBEMBEDDED
+      - MUSIC
+    remoteCipher:
+      url: "${YOUTUBE_REMOTE_CIPHER_URL:-http://yt-cipher:8001}"
+      password: "${YOUTUBE_REMOTE_CIPHER_PASSWORD:-}"
+      userAgent: "${YOUTUBE_REMOTE_CIPHER_USER_AGENT:-AnankorBot}"
+  lavasrc:
+    enabled: true
+    providers:
+      - 'ytsearch:"%ISRC%"'
+      - 'ytsearch:%QUERY%'
+    sources:
+      spotify: true
+      applemusic: true
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      youtube: false
+      vkmusic: false
+      tidal: false
+      qobuz: false
+      ytdlp: false
+      jiosaavn: false
+    spotify:
+      clientId: "${SPOTIFY_CLIENT_ID:-}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET:-}"
+      spDc: "${SPOTIFY_SP_DC:-}"
+      countryCode: "${SPOTIFY_COUNTRY_CODE:-US}"
+    applemusic:
+      countryCode: "${APPLE_MUSIC_COUNTRY_CODE:-US}"
+      mediaAPIToken: "${APPLE_MUSIC_MEDIA_API_TOKEN:-}"

@@ -206,13 +206,30 @@ services:
   lavalink:
     container_name: anankor-lavalink
     image: ghcr.io/lavalink-devs/lavalink:4.1.1
+    depends_on:
+      - yt-cipher
+    env_file:
+      - .env
     environment:
       SERVER_PORT: 2333
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+      - ./lavalink/plugins:/opt/Lavalink/plugins:ro
     ports:
       - '2333:2333'
+    restart: unless-stopped
+
+  yt-cipher:
+    container_name: anankor-yt-cipher
+    image: ghcr.io/kikkia/yt-cipher:master
+    env_file:
+      - .env
+    environment:
+      API_TOKEN: ${YTCIPHER_API_TOKEN:-}
+    ports:
+      - '8001:8001'
+    restart: unless-stopped
 
   prometheus:
     container_name: anankor-prometheus

@@ -106,6 +106,12 @@ interface LavalinkNodeLike {
   [key: string]: unknown;
 }
 
+type LavalinkVoiceConnectOptions = {
+  voiceChannelId: string;
+  selfDeaf: boolean;
+  selfMute: boolean;
+};
+
 type QueueEntry = {
   track: LavalinkTrackLike;
   requestedBy: CommandRequester;
@@ -430,7 +436,7 @@ export class MusicPlaybackService {
     const entries = resolvedTracks.map((track) => this.buildQueueEntry(track, job.requester));
     state.queue.push(...entries);
     state.textChannelId = job.textChannelId;
-    await this.ensurePlayerConnected(state, job.voiceChannelId);
+    await this.ensurePlayerConnected(state, job.voiceChannelId, job.guildId);
 
     const wasIdle = state.current === null;
     const queuedCount = entries.length;
@@ -782,7 +788,7 @@ export class MusicPlaybackService {
     if (existing) {
       existing.textChannelId = textChannelId;
       if (existing.voiceChannelId !== voiceChannelId) {
-        await this.ensurePlayerConnected(existing, voiceChannelId);
+        await this.ensurePlayerConnected(existing, voiceChannelId, guildId);
       }
       return existing;
     }
@@ -813,7 +819,7 @@ export class MusicPlaybackService {
     };
 
     this.guildStates.set(guildId, state);
-    await this.ensurePlayerConnected(state, voiceChannelId);
+    await this.ensurePlayerConnected(state, voiceChannelId, guildId);
 
     return state;
   }
@@ -878,60 +884,72 @@ export class MusicPlaybackService {
     return player;
   }
 
-  private async ensurePlayerConnected(state: GuildPlaybackState, voiceChannelId: string): Promise<void> {
+  private async ensurePlayerConnected(
+    state: GuildPlaybackState,
+    voiceChannelId: string,
+    guildId?: string,
+  ): Promise<void> {
     if (!voiceChannelId) {
       return;
     }
 
     const player = state.player;
     const currentChannel = typeof player.voiceChannelId === 'string' ? player.voiceChannelId : null;
-    const playerGuildId = (player as { guildId?: string }).guildId ?? state.voiceChannelId;
-    const playerOptions = (player as { options?: { voiceChannelId?: string; selfDeaf?: boolean; selfMute?: boolean } }).options;
-    if (playerOptions) {
-      playerOptions.voiceChannelId = voiceChannelId;
-      playerOptions.selfDeaf = true;
-      playerOptions.selfMute = false;
-    }
+    const playerGuildId = guildId ?? this.resolveGuildId(player);
+    const playerOptionsContainer = (player as {
+      options?: { voiceChannelId?: string; selfDeaf?: boolean; selfMute?: boolean };
+    }).options;
+    const playerOptions =
+      playerOptionsContainer ??
+      ((player as {
+        options: { voiceChannelId?: string; selfDeaf?: boolean; selfMute?: boolean };
+      }).options = {});
+    playerOptions.voiceChannelId = voiceChannelId;
+    playerOptions.selfDeaf = true;
+    playerOptions.selfMute = false;
 
-    if (currentChannel === voiceChannelId) {
+    if (currentChannel === voiceChannelId && this.isVoiceSessionReady(player)) {
       state.voiceChannelId = voiceChannelId;
-      await this.invokePlayerConnect(player, playerGuildId);
+      player.voiceChannelId = voiceChannelId;
       return;
     }
 
-    const connectOptions = { voiceChannelId, selfDeaf: true, selfMute: false };
+    const connectOptions: LavalinkVoiceConnectOptions = { voiceChannelId, selfDeaf: true, selfMute: false };
 
-    if (!currentChannel) {
-      const connected = await this.invokePlayerConnect(player, playerGuildId);
-      if (connected) {
-        state.voiceChannelId = voiceChannelId;
-        return;
+    if (currentChannel === voiceChannelId) {
+      await this.invokePlayerConnect(player, playerGuildId, voiceChannelId);
+    } else if (!currentChannel) {
+      const connected = await this.invokePlayerConnect(player, playerGuildId, voiceChannelId);
+      if (!connected) {
+        await this.performVoiceJoin(player, playerGuildId, voiceChannelId, connectOptions, true);
       }
-    }
-
-    if (typeof (player as { changeVoiceState?: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
-      await Promise.resolve(
-        (player as { changeVoiceState: (data: typeof connectOptions) => Promise<void> | void }).changeVoiceState(connectOptions),
-      );
-    } else if (await this.invokePlayerConnect(player, playerGuildId)) {
-      // connect handled inside invokePlayerConnect
-    } else if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
-      await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
+    } else {
+      await this.performVoiceJoin(player, playerGuildId, voiceChannelId, connectOptions);
     }
 
     state.voiceChannelId = voiceChannelId;
+    player.voiceChannelId = voiceChannelId;
+    await this.waitForVoiceSession(player, playerGuildId, voiceChannelId);
   }
 
   /**
    * Attempt to issue an op:4 voice update via the Lavalink player, logging failures once.
    */
-  private async invokePlayerConnect(player: LavalinkPlayerLike, guildId: string | null): Promise<boolean> {
+  private async invokePlayerConnect(
+    player: LavalinkPlayerLike,
+    guildId: string | null,
+    voiceChannelId: string,
+  ): Promise<boolean> {
     if (typeof player.connect !== 'function') {
       return false;
     }
 
     try {
-      await Promise.resolve(player.connect());
+      if (player.connect.length >= 1) {
+        await Promise.resolve((player as { connect: (channelId: string) => Promise<void> | void }).connect(voiceChannelId));
+      } else {
+        await Promise.resolve(player.connect());
+      }
       return true;
     } catch (error) {
       this.logger.warn({ err: error, guildId }, 'player.connect() failed');
@@ -939,7 +957,91 @@ export class MusicPlaybackService {
     }
   }
 
+  private async performVoiceJoin(
+    player: LavalinkPlayerLike,
+    guildId: string | null,
+    voiceChannelId: string,
+    options: LavalinkVoiceConnectOptions,
+    skipConnectFallback = false,
+  ): Promise<void> {
+    if (typeof (player as { changeVoiceState?: (data: LavalinkVoiceConnectOptions) => Promise<void> | void }).changeVoiceState === 'function') {
+      await Promise.resolve(
+        (player as { changeVoiceState: (data: LavalinkVoiceConnectOptions) => Promise<void> | void }).changeVoiceState(options),
+      );
+      return;
+    }
+
+    if (!skipConnectFallback && (await this.invokePlayerConnect(player, guildId, voiceChannelId))) {
+      return;
+    }
+
+    if (typeof (player as { join?: (id: string) => Promise<void> | void }).join === 'function') {
+      await Promise.resolve((player as { join: (id: string) => Promise<void> | void }).join(voiceChannelId));
+    }
+  }
+
+  private isVoiceSessionReady(player: LavalinkPlayerLike): boolean {
+    const voice = (player as { voice?: { token?: unknown; endpoint?: unknown; sessionId?: unknown } }).voice;
+    const hasToken = typeof voice?.token === 'string' && voice.token.length > 0;
+    const hasEndpoint = typeof voice?.endpoint === 'string' && voice.endpoint.length > 0;
+    const hasSessionId = typeof voice?.sessionId === 'string' && voice.sessionId.length > 0;
+    return hasToken && hasEndpoint && hasSessionId;
+  }
+
+  private async waitForVoiceSession(
+    player: LavalinkPlayerLike,
+    guildId: string | null,
+    voiceChannelId: string,
+  ): Promise<void> {
+    if (this.isVoiceSessionReady(player)) {
+      return;
+    }
+
+    const MAX_WAIT_MS = 5_000;
+    const POLL_INTERVAL_MS = 100;
+    const startedAt = Date.now();
+    this.logger.info(
+      { guildId: guildId ?? this.resolveGuildId(player), voiceChannelId },
+      'Waiting for voice handshake to complete',
+    );
+
+    while (Date.now() - startedAt < MAX_WAIT_MS) {
+      if (this.isVoiceSessionReady(player)) {
+        this.logger.info(
+          { guildId: guildId ?? this.resolveGuildId(player), voiceChannelId },
+          'Voice handshake established',
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+
+    this.logger.warn(
+      {
+        guildId: guildId ?? this.resolveGuildId(player),
+        voiceChannelId,
+      },
+      'Timed out waiting for voice handshake before playback',
+    );
+  }
+
   private async playTrack(player: LavalinkPlayerLike, track: LavalinkTrackLike): Promise<void> {
+    const sessionId = this.resolveNodeSessionId(player);
+    if (sessionId && this.isVoiceSessionReady(player)) {
+      const encoded = this.resolveEncodedTrack(track);
+      if (encoded) {
+        try {
+          await this.updatePlayerViaRest(player, track, sessionId, encoded);
+          return;
+        } catch (error) {
+          this.logger.warn(
+            { err: error, sessionId, guildId: this.resolveGuildId(player), track: formatTrackTitle(track) },
+            'Failed to patch Lavalink player via REST, falling back to lavalink-client play()',
+          );
+        }
+      }
+    }
+
     if (typeof player.play === 'function') {
       const playOptions = this.buildPlayOptions(track);
       if (playOptions) {
@@ -964,6 +1066,85 @@ export class MusicPlaybackService {
     }
 
     throw new Error('Lavalink player missing play method');
+  }
+
+  private resolveNodeSessionId(player: LavalinkPlayerLike): string | null {
+    const node = (player as { node?: { sessionId?: unknown } }).node;
+    if (node && typeof node.sessionId === 'string' && node.sessionId.length > 0) {
+      return node.sessionId;
+    }
+    return null;
+  }
+
+  private async updatePlayerViaRest(
+    player: LavalinkPlayerLike,
+    track: LavalinkTrackLike,
+    sessionId: string,
+    encoded: string,
+  ): Promise<void> {
+    const guildId = this.resolveGuildId(player);
+    if (!guildId) {
+      throw new Error('Unable to resolve guildId for Lavalink player REST update');
+    }
+
+    const nodeId = (player as { node?: { id?: string } }).node?.id;
+    const nodeConfig =
+      (nodeId && this.nodes.find((candidate) => candidate.id === nodeId)) ?? this.nodes[0];
+
+    if (!nodeConfig) {
+      throw new Error('No Lavalink node configuration available for REST update');
+    }
+
+    const base = `${nodeConfig.secure ? 'https' : 'http'}://${nodeConfig.host}:${nodeConfig.port}`;
+    const url = new URL(`/v4/sessions/${encodeURIComponent(sessionId)}/players/${encodeURIComponent(guildId)}`, base);
+
+    const volume = this.resolvePlayerVolume({ player, volume: undefined }) ?? 100;
+    const body: Record<string, unknown> = {
+      track: {
+        encoded,
+      },
+      volume,
+    };
+
+    if (this.isVoiceSessionReady(player)) {
+      const voice = (player as { voice?: { token?: string; endpoint?: string; sessionId?: string } }).voice;
+      if (
+        voice &&
+        typeof voice.token === 'string' &&
+        typeof voice.endpoint === 'string' &&
+        typeof voice.sessionId === 'string'
+      ) {
+        body.voice = {
+          token: voice.token,
+          endpoint: voice.endpoint,
+          sessionId: voice.sessionId,
+        };
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: nodeConfig.password,
+        'Client-Name': this.clientName,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await response.text().catch(() => '');
+      throw new Error(`Lavalink player PATCH failed with status ${response.status}: ${errorPayload}`);
+    }
+
+    this.logger.debug(
+      {
+        guildId,
+        sessionId,
+        track: formatTrackTitle(track),
+      },
+      'Patched Lavalink player via REST',
+    );
   }
 
   private async pausePlayer(player: LavalinkPlayerLike, pause: boolean): Promise<void> {
@@ -1040,6 +1221,15 @@ export class MusicPlaybackService {
         break;
       }
       try {
+        this.logger.info(
+          {
+            guildId,
+            attempt,
+            voiceReady: this.isVoiceSessionReady(state.player),
+            track: formatTrackTitle(nextEntry.track),
+          },
+          'Attempting to start next track',
+        );
         await this.playTrack(state.player, nextEntry.track);
         state.current = nextEntry;
         state.paused = false;
@@ -1257,6 +1447,10 @@ export class MusicPlaybackService {
     }
 
     state.paused = false;
+    this.logger.info(
+      { guildId, track: formatTrackTitle(track) },
+      'Lavalink reported track start',
+    );
   }
 
   private async handleTrackEnd(
