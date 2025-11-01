@@ -1,359 +1,258 @@
-# Anankor Monorepo
+<center><img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&height=200&section=header&text=Anankor&fontSize=80&fontAlignY=35&animation=twinkling&fontColor=gradient" /></center>
 
-Anankor is a production-focused Discord music platform designed around a master/worker bot architecture. The repository prioritizes modularity, observability, and operational readiness from day one. It bundles the core Discord experiences (slash commands, voice playback via Lavalink, queue management) with a scalable job-processing pipeline powered by Redis Streams and DynamoDB-enforced idempotency.
+[![Version][version-shield]](version-url)
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
 
----
+<!-- PROJECT LOGO -->
+<br />
+<p align="center">
+  <a href="https://github.com/your-org/anankor">
+    <img src="https://cdn.discordapp.com/avatars/875635121770889257/adc4fd956872a72814b70448d1fddd40.webp?size=512" alt="anankor" width="200" height="200">
+  </a>
 
-## Table of Contents
-1. [Key Features](#key-features)
-2. [Architecture Overview](#architecture-overview)
-3. [Repository Layout](#repository-layout)
-4. [Technology Stack](#technology-stack)
-5. [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Environment Variables](#environment-variables)
-    - [Installation](#installation)
-6. [Local Development Workflows](#local-development-workflows)
-    - [Running with Docker Compose](#running-with-docker-compose)
-    - [Running TypeScript Apps Locally](#running-typescript-apps-locally)
-    - [Watch Mode & Hot Reload](#watch-mode--hot-reload)
-7. [Build, Test, and Lint Commands](#build-test-and-lint-commands)
-8. [Packages & Apps Reference](#packages--apps-reference)
-    - [Shared Packages](#shared-packages)
-    - [Applications](#applications)
-9. [Infrastructure & Observability](#infrastructure--observability)
-10. [Scripts](#scripts)
-11. [Testing Strategy](#testing-strategy)
-12. [Deployment Considerations](#deployment-considerations)
-13. [Troubleshooting](#troubleshooting)
-14. [Roadmap](#roadmap)
-15. [Contributing Guidelines](#contributing-guidelines)
-16. [Security & Compliance](#security--compliance)
-17. [License](#license)
+  <h1 align="center">Anankor</h1>
+  <p align="center">Anankor is a Discord music bot that uses Discord.js, lavalink-client, and TypeScript.
+    <br />
+    <br />
+    <a href="https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=279209954560&scope=bot+applications.commands">Invite Anankor</a>
+    ·
+    <a href="https://github.com/your-org/anankor/issues">Report Bug & Request Feature</a>
+  </p>
+</p>
 
----
+## 🔥 Unique Features
 
-## Key Features
-- **Master/Worker Discord Architecture:** Master bot handles user interactions; worker bots execute queued jobs with per-token isolation.
-- **Job Management with Idempotency:** Redis Streams consumer groups combined with DynamoDB for dedupe guarantees at enqueue time.
-- **Music Playback via Lavalink:** Dedicated `@anankor/music` package manages Lavalink sessions, reconnections, and player abstractions.
-- **Observability from Day One:** Prometheus metrics, OTEL traces, and pre-provisioned Grafana dashboards to monitor throughput, latency, and health.
-- **Infrastructure as Code:** Docker Compose layout suitable for local development, with scaffolding for eventual Kubernetes/Terraform adoption.
-- **TypeScript Monorepo:** pnpm workspaces + Turborepo; consistent tooling (ESLint, Prettier, Vitest) across apps and packages.
+- User-friendly and Easy to Use
+- Highly Configurable
+- Customizable Prefix
+- Multilingual support [Here](/Translation.md)
+- Hybrid Command Handling (Slash and Normal Commands)
+- Developed using TypeScript and Discord.js v14
+- Advanced Music System
+- Powerful Search Engine
+- 12 + Music Filters
+- 24/7 Music Playback
+- Playlist commands
+- Music channel system
 
----
+## 🎶 Support Sources
 
-## Architecture Overview
+### 🔍 Default Sources
 
-### High-Level Flow
-1. Master bot logs into Discord, registers (or will register) slash commands, and receives user interactions.
-2. Requests are validated against shared schemas (`@anankor/schemas`).
-3. Jobs are enqueued onto Redis Streams with idempotency keys persisted in DynamoDB.
-4. Worker fleet instances (one container per Discord token) consume jobs, execute the relevant handler, and interact with Lavalink/Discord APIs.
-5. Telemetry (metrics + traces + structured logs) is emitted throughout the pipeline.
+- ![SoundCloud](https://img.shields.io/badge/SoundCloud-FF3300?style=plastic&logo=soundcloud&logoColor=white)
+- ![Twitch](https://img.shields.io/badge/Twitch-9146FF?style=plastic&logo=twitch&logoColor=white)
+- ![Bandcamp](https://img.shields.io/badge/Bandcamp-629AA9?style=plastic&logo=bandcamp&logoColor=white)
+- ![Vimeo](https://img.shields.io/badge/Vimeo-1AB7EA?style=plastic&logo=vimeo&logoColor=white)
+- ![Nico](https://img.shields.io/badge/Nico-FF0066?style=plastic&logo=nico&logoColor=white)
+- ![Mixer](https://img.shields.io/badge/Mixer-FFA500?style=plastic&logo=mixer&logoColor=white)
+- ![http](https://img.shields.io/badge/http-FFA500?style=plastic&logo=http&logoColor=white)
 
-### Major Services
-- **Master:** API edge, command router, job producer.
-- **Workers:** Job consumers, Lavalink clients, stateful music executors.
-- **Redis:** Stream storage, token claims, caching.
-- **DynamoDB:** Idempotency records, guild -> worker assignments.
-- **Lavalink:** Off-process audio playback engine.
-- **OTEL Collector + Prometheus + Grafana:** Observability pipeline.
+### 🔌 Plugin Sources
 
-The repository enforces separation between orchestration (master) and execution (workers) to support horizontal scaling and fault isolation. Workers can crash independently without disturbing the master; token claims automatically fail over.
+**Note: You need to install the plugins to use these sources**
 
----
+- ![YouTube](https://img.shields.io/badge/YouTube-FF0000?style=plastic&logo=youtube&logoColor=white) ([Required Plugin][youtube-source])
+- ![Spotify](https://img.shields.io/badge/Spotify-1ED760?style=plastic&logo=spotify&logoColor=white) ([Required Plugin][LavaSrc])
+- ![Deezer](https://img.shields.io/badge/Deezer-FF0000?style=plastic&logo=deezer&logoColor=white) ([Required Plugin][LavaSrc])
+- ![Apple Music](https://img.shields.io/badge/Apple%20Music-000000?style=plastic&logo=apple-music&logoColor=white) ([Required Plugin][LavaSrc])
+- ![Yandex Music](https://img.shields.io/badge/Yandex%20Music-FF0066?style=plastic&logo=yandex-music&logoColor=white) ([Required Plugin][LavaSrc])
+- ![jiosaavn](https://img.shields.io/badge/jiosaavn-51C4D3?style=plastic&logo=jiosaavn&logoColor=white) ([Required Plugin][Jiosaavn])
+- ![Mixcloud](https://img.shields.io/badge/Mixcloud-51C4D3?style=plastic&logo=mixcloud&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Ocremix](https://img.shields.io/badge/Ocremix-FF6600?style=plastic&logo=ocremix&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Clyp](https://img.shields.io/badge/Clyp-6BB5A6?style=plastic&logo=clyp&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Reddit](https://img.shields.io/badge/Reddit-FF4500?style=plastic&logo=reddit&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Getyarn](https://img.shields.io/badge/Getyarn-FF9000?style=plastic&logo=getyarn&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![TikTok](https://img.shields.io/badge/TikTok-FF2D55?style=plastic&logo=tiktok&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Soundgasm](https://img.shields.io/badge/Soundgasm-F1672F?style=plastic&logo=soundgasm&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
+- ![Text To Speech](https://img.shields.io/badge/Text%20To%20Speech-3080ff?style=plastic&logo=google-translate&logoColor=white) ([Required Plugin][skybot-lavalink-plugin])
 
-## Repository Layout
-```
-anankor/
-├─ apps/
-│  ├─ master/
-│  │  ├─ src/
-│  │  │  ├─ bot/
-│  │  │  ├─ commands/
-│  │  │  ├─ interactions/
-│  │  │  ├─ workflows/
-│  │  │  ├─ jobs/
-│  │  │  ├─ http/
-│  │  │  ├─ middleware/
-│  │  │  ├─ services/
-│  │  │  ├─ metrics/
-│  │  │  ├─ index.ts
-│  │  │  └─ env.ts
-│  │  ├─ Dockerfile
-│  │  └─ README.md
-│  └─ worker/
-│     ├─ src/
-│     │  ├─ bot/
-│     │  ├─ lavalink/
-│     │  ├─ consumers/
-│     │  ├─ handlers/
-│     │  ├─ schedulers/
-│     │  ├─ services/
-│     │  ├─ metrics/
-│     │  ├─ index.ts
-│     │  └─ env.ts
-│     ├─ Dockerfile
-│     └─ README.md
-├─ packages/
-│  ├─ core/
-│  ├─ config/
-│  ├─ logger/
-│  ├─ telemetry/
-│  ├─ discord/
-│  ├─ ipc/
-│  ├─ storage/
-│  ├─ music/
-│  └─ schemas/
-├─ infra/
-│  ├─ docker/
-│  │  ├─ docker-compose.yaml
-│  │  ├─ .env.example
-│  │  ├─ lavalink/
-│  │  ├─ prometheus/
-│  │  ├─ grafana/
-│  │  ├─ dynamodb/
-│  │  ├─ redis/
-│  │  └─ otel-collector/
-│  ├─ k8s/
-│  └─ terraform/
-├─ scripts/
-│  ├─ dev.sh
-│  ├─ count-worker-tokens.sh
-│  └─ ci/
-├─ docs/
-│  ├─ 01-architecture.md
-│  ├─ 02-queues-and-dedupe.md
-│  ├─ 03-data-models.md
-│  ├─ 04-lavalink.md
-│  ├─ 05-observability.md
-│  └─ API_REFERENCE.md
-├─ package.json
-├─ pnpm-workspace.yaml
-├─ turbo.json
-├─ tsconfig.base.json
-├─ .eslintrc.cjs
-├─ .prettierrc
-├─ .gitignore
-└─ README.md
-```
+[LavaSrc]: https://github.com/topi314/LavaSrc
+[skybot-lavalink-plugin]: https://github.com/DuncteBot/skybot-lavalink-plugin
+[youtube-source]: https://github.com/lavalink-devs/youtube-source
+[jiosaavn]: https://github.com/itzappu/jiosaavn-plugin
 
----
+To Setup a Lavalink server on Windows, Linux, or Replit, [Click Here!](https://github.com/LucasB25/lavalink-server)
 
-## Technology Stack
-| Layer            | Technology                          |
-|------------------|-------------------------------------|
-| Language         | TypeScript (Node.js 22.21+)         |
-| Package Manager  | pnpm 10.19                          |
-| Monorepo Tooling | Turborepo 2.x                       |
-| Discord SDK      | discord.js 14                       |
-| Queueing         | Redis Streams                       |
-| Persistence      | Amazon DynamoDB (Local)             |
-| Music Engine     | Lavalink 4.x                        |
-| Telemetry        | OpenTelemetry, Prometheus, Grafana  |
-| Containers       | Docker Compose                      |
+### **Need help with plugins?**
 
----
+Set up your own support channel and share it with your community for assistance.
 
-## Getting Started
+## 🔧 Requirements
 
-### Prerequisites
-- **Node.js** v22.21 or later (`nvm install 22.21.0` recommended).
-- **pnpm** v10.19 (installed via `corepack enable`).
-- **Docker & Docker Compose** (Docker Desktop or CLI >= 20.10).
-- Access to Discord bot tokens (one master + N worker tokens).
-- AWS credentials (local/dev values accepted for DynamoDB Local).
+Before starting with the installation, you need to have the following:
 
-### Environment Variables
+- ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white) [Recommend LTS or higher](https://nodejs.org/)
+- ![Lavalink](https://img.shields.io/badge/Lavalink-7289DA?style=for-the-badge&logo=discord&logoColor=white) [v4 or higher](https://github.com/lavalink-devs/lavalink)
 
-Copy the examples to real files and populate secrets:
-```
-cp .env.example .env                      # Optional; used for local non-Docker runs
-cp infra/docker/.env.example infra/docker/.env
-```
-Key variables:
-- `DISCORD_MASTER_TOKEN=...`
-- `DISCORD_WORKER_TOKEN_1=...` (one per worker container)
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
-- `REDIS_URL=redis://redis:6379`
-- `LAVALINK_PASSWORD=...`
-- `OTLP_ENDPOINT=http://otel-collector:4318`
+### Optional
 
-**Important:** never commit `.env` files. All secrets are gitignored.
+- ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white) [Optional](https://www.mongodb.com/try/download/community) (For MongoDB database)
+- ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white) [Optional](https://www.postgresql.org/download/) (For PostgreSQL database)
+- ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white) [Optional](https://www.docker.com/) (For Docker Installation)
+- ![Docker-Compose](https://img.shields.io/badge/Docker--Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white) [Optional](https://docs.docker.com/compose/) (For Docker Installation)
 
-### Installation
+## 🚀 Installation from source
+
+1. Clone the Anankor repository:
+
 ```bash
-pnpm install
+git clone https://github.com/your-org/anankor.git
 ```
-This hydrates dependencies for every workspace package and generates a `pnpm-lock.yaml` if missing (leave uncommitted if this repository prefers lockfiles elsewhere).
 
----
+2. Change to the Anankor directory:
 
-## Local Development Workflows
-
-### Running with Docker Compose
-Spin up the full stack, including Redis, Lavalink, Prometheus, Grafana, OTEL collector, master, and all worker bots:
 ```bash
-docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yaml up --build
-# Optional: in another terminal, enable file-watch-triggered rebuilds
-docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yaml watch
+cd anankor
 ```
-Workers will auto-claim tokens based on the environment variables. Logs for each service are available via:
+
+3. Install the required packages:
+
 ```bash
-docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yaml logs -f master
+npm i
 ```
 
-### Running TypeScript Apps Locally
-For direct Node execution without containers:
+4. Compile:
+
+```
+npm run build
+```
+
+5. Copy the `.env.example` file to `.env` and fill in all required values:
+
+6. Copy the `example.<The data source you want to use>.schema.prisma` file to `schema.prisma` in `prisma` folder
+   Note: If you want to use sqlite, skip this step.
+   If you are using a different data source, don't forget to fill in the `DATABASE_URL` value in `.env`.
+
+7. Generate the Prisma client:
+
 ```bash
-# Master
-pnpm --filter @anankor/master dev
-
-# Specific package build
-pnpm --filter @anankor/ipc build
+npm run db:push
 ```
-Ensure `.env` is populated and Lavalink/Redis are reachable (via Docker or local installations).
 
-### Watch Mode & Hot Reload
+8. Run the migrations (Only if you want to migrate your database):
+
 ```bash
-pnpm watch        # Runs watch scripts for all packages/apps
-pnpm --filter @anankor/master watch
+npm run db:migrate
 ```
-Watch mode uses TypeScript incremental builds to recompile on file changes. For containerized workflows, `docker compose watch` rebuilds the affected service automatically.
 
----
+9. Run the bot:
 
-## Build, Test, and Lint Commands
-| Command                                  | Description                                         |
-|------------------------------------------|-----------------------------------------------------|
-| `pnpm build`                             | Runs Turborepo build pipeline across all projects.  |
-| `pnpm lint`                              | Executes ESLint with TypeScript rules.              |
-| `pnpm format`                            | Applies Prettier formatting.                        |
-| `pnpm test`                              | Runs Turborepo test pipeline (Vitest recommended).  |
-| `pnpm dev`                               | `turbo run dev` – use for local iterative work.     |
-| `pnpm watch`                             | Continuous compilation for every package.           |
-| `docker compose ... up --build`          | Builds and runs containers.                         |
-| `docker compose ... logs <service>`      | Streams logs from a specific service.               |
-| `scripts/count-worker-tokens.sh`         | Quick count of `DISCORD_WORKER_TOKEN_*` entries.    |
+Note: You can also run `run.bat` to easily run the bot on Windows.
 
----
+```bash
+npm start
+```
 
-## Packages & Apps Reference
+10. Invite the bot to your server:
 
-### Shared Packages
-| Package             | Purpose                                                                                       |
-|---------------------|-----------------------------------------------------------------------------------------------|
-| `@anankor/core`     | Generic utilities (sleep, retry, timers).                                                     |
-| `@anankor/config`   | Typed environment loader (dotenv + zod schemas).                                              |
-| `@anankor/logger`   | Pino logger with redaction rules and trace correlation hooks.                                 |
-| `@anankor/telemetry`| Bootstraps OpenTelemetry Node SDK, sets resource attributes, wires OTLP exporters.            |
-| `@anankor/discord`  | Discord interaction router utilities, to grow into command guards and reply helpers.         |
-| `@anankor/ipc`      | Redis client factory, worker token claim logic, job ID utilities.                             |
-| `@anankor/storage`  | DynamoDB document client setup, Redis key/stream constants.                                   |
-| `@anankor/music`    | Lavalink manager wrapper, ready for player abstractions.                                      |
-| `@anankor/schemas`  | Zod schemas for job payloads, events, and shared interfaces.                                  |
+Generate an invite link for your bot and invite it to your server using the [Discord Developer Portal](https://discord.com/developers/applications) or [Permissions Calculator](https://discordapi.com/permissions.html).
 
-All packages use TypeScript build outputs (declarations included) and share `tsconfig.base.json` configuration.
+11. (Optional) Deploy Slash Commands
 
-### Applications
-- **`@anankor/master`**: Discord gateway entrypoint. Future home for command registration, health endpoints, job producers, and HTTP hooks.
-- **`@anankor/worker`**: Worker bot entrypoint. Claims a worker token, connects to Discord voice, consumes Redis Streams, and controls Lavalink players.
+Make sure that your User ID is listed under `OWNER_IDS` in `.env`. In the Discord server with Anankor, run
 
-Each app has its own Dockerfile to enable multi-stage builds. Containers install workspace dependencies once and run `pnpm --filter ... build` before invoking Node.
+```
+!deploy
+```
 
----
+## 🚀 Installation using Docker Compose
 
-## Infrastructure & Observability
-- **Docker Compose Services:** `master`, `worker1-5`, `redis`, `dynamodb`, `lavalink`, `prometheus`, `grafana`, `otel-collector`.
-- **Prometheus:** Configuration under `infra/docker/prometheus/prometheus.yml`; scrapes master and worker metrics endpoints once implemented.
-- **Grafana:** Provisioning in `infra/docker/grafana/provisioning`; dashboards stored in `infra/docker/grafana/dashboards/`.
-- **OTEL Collector:** Configured via `infra/docker/otel-collector/config.yaml`; exports metrics to Prometheus (port 9464) and traces to debug logs.
-- **Redis:** Optional custom configuration (`infra/docker/redis/redis.conf`).
-- **DynamoDB Local:** Startup script `infra/docker/dynamodb/create-tables.sh` to create required tables.
+This section assumes you have Docker and Docker Compose installed and running correctly.
+Copy the `.env.example` file to `.env` and fill in all required values:
 
-Future infrastructure placeholders exist under `infra/k8s` and `infra/terraform` for Kubernetes and Terraform rollouts.
+```yaml
+TOKEN="." # Your bot token and remember, don't show everyone your bot token
+DEFAULT_LANGUAGE= "EnglishUS" # Default language for bot
+PREFIX="!" # Your prefix
+OWNER_IDS=["859640640640640640","859640640640640640"] # Your discord id, you can add multiple ids
+GUILD_ID="859640640640640640" # Your server ID (if you want to use it for a single server)
+```
 
----
+Then copy `Lavalink/example.application.yml` to `Lavalink/application.yml` and put any Lavalink plugins you want to use in `Lavalink/plugins`.
 
-## Scripts
-| Script                                | Description                                                         |
-|---------------------------------------|---------------------------------------------------------------------|
-| `scripts/dev.sh up/down/logs`         | Wrapper around Docker Compose commands for convenience.             |
-| `scripts/count-worker-tokens.sh`      | Counts worker tokens in the Compose `.env` file.                   |
-| `scripts/ci/docker-build.mjs`         | Example CI entry point for building app images.                    |
+After saving your changes you can open a terminal and go to the same location as the docker-compose.yml file. Then run the following:
 
-All scripts are executable (`chmod +x`). Extend the `scripts/ci` directory for additional automation (linting, tests, image push).
+```bash
+docker compose up -d
+```
 
----
+The above command will start all your services and your bot should be up and running!
+If you want to run it from the console, remove the -d argument.
 
-## Testing Strategy
-- **Unit Tests:** Use Vitest within each package/app. Place tests under `src/__tests__` or `tests/` with the naming pattern `*.test.ts`.
-- **Integration Tests:** Spin up Redis and Lavalink via Docker Compose. Use setup scripts to seed DynamoDB Local and verify worker behavior.
-- **Smoke Tests:** Redis CLI commands (`XADD`, `XREAD`) validate queue wiring; Discord slash commands verify command routing.
-- **Coverage:** Aim for 80%+ line coverage in critical packages (`config`, `ipc`, `storage`). Expand coverage as more logic is implemented.
+Now, you can invite the bot to your server.
 
-`pnpm test` orchestrates tests workspace-wide. Add package-specific scripts if you require specialized setups.
+To update, you only have to type the following:
 
----
+```bash
+docker compose up --force-recreate --build -d
+image prune -f
+```
 
-## Deployment Considerations
-- **Images:** Build using the provided Dockerfiles. Tag images per environment (`anankor-master:<version>`).
-- **Configuration:** Externalize secrets via environment variables or secret managers. Never bake tokens into images.
-- **Scaling:** Add `DISCORD_WORKER_TOKEN_N` entries and corresponding services in Compose (or in future, scale via Kubernetes Deployments + StatefulSets).
-- **Persistence:** For production DynamoDB/Redis, use managed services. Compose files are strictly for local development and CI.
-- **CI/CD:** See `.github/workflows/ci.yml` for lint/build/test pipeline. Extend to include image build/push, IaC validation, etc.
+You can automate this by using [Watchtower](https://github.com/containrrr/watchtower). The following should be sufficient:
 
----
+```bash
+docker run --detach \
+    --name watchtower \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --restart on-failure \
+    containrrr/watchtower --cleanup
+```
 
-## Troubleshooting
-| Issue                                           | Resolution                                                                                                 |
-|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| Master exits immediately                        | Ensure `.env` or `infra/docker/.env` contains `DISCORD_MASTER_TOKEN` and Discord bot is invited to guilds. |
-| Workers fail to claim tokens                    | Confirm each token is unique, valid, and the bot is added to target guilds. Check Redis for claim keys.    |
-| Lavalink connection errors                      | Verify `infra/docker/lavalink/application.yml` password matches `LAVALINK_PASSWORD`.                       |
-| OTEL collector exits (`address already in use`) | Prometheus exporter moved to port 9464; ensure no host service is bound to that port.                      |
-| Discord 401/403 errors                          | Tokens may be invalid or privileges missing; regenerate tokens and reconfigure env files.                  |
-| DynamoDB table missing                          | Run `infra/docker/dynamodb/create-tables.sh` against the local endpoint.                                  |
-| Build fails due to Node version                 | Confirm Node 22.21+ and pnpm 10.19+ are installed (`corepack prepare pnpm@10.19.0`).                       |
+Do note that the bot will restart itself to update to the latest!
 
-Additional details and diagrams live in the `docs/` folder.
+## 🔗 Useful Links
 
----
+- ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white) [Node.js](https://nodejs.org/en/download/)
+- ![Discord.js](https://img.shields.io/badge/Discord.js-7289DA?style=for-the-badge&logo=discord&logoColor=white) [Discord.js](https://discord.js.org/#/)
+- ![Lavalink](https://img.shields.io/badge/Lavalink-7289DA?style=for-the-badge&logo=discord&logoColor=white) [Lavalink](https://github.com/lavalink-devs/Lavalink)
+- ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white) [MongoDB](https://www.mongodb.com/try/download/community)
+- ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white) [PostgreSQL](https://www.postgresql.org/download/)
+- ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white) [Docker](https://www.docker.com/)
+- ![Docker-Compose](https://img.shields.io/badge/Docker--Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white) [Docker-Compose](https://docs.docker.com/compose/)
 
-## Roadmap
-1. **Slash Command Registration:** Automate command sync on master boot.
-2. **Job Producers/Handlers:** Implement play/pause/queue flows using Redis Streams, DynamoDB dedupe, and Lavalink integration.
-3. **Health & Metrics Endpoints:** Expose `/health`, `/ready`, `/metrics` for master and worker services.
-4. **Retry & DLQ Management:** Use Redis `XAUTOCLAIM` for retries, with dashboards tracking failure counts.
-5. **Kubernetes Manifests:** Translate Compose setup to K8s deployment charts in `infra/k8s`.
-6. **Secrets Management:** Integrate with AWS Secrets Manager or HashiCorp Vault for production secrets.
-7. **Comprehensive Test Suite:** Expand unit/integration coverage and add smoke tests for deployment pipelines.
+## 📝 Tutorial
 
----
+A tutorial has been uploaded on YouTube. Watch it by [clicking here](https://youtu.be/x5lQD2rguz0).
 
-## Contributing Guidelines
-- Read `AGENTS.md` for a condensed contributor reference.
-- Fork or branch off `main`. Keep branches scoped to a single feature or fix.
-- Run `pnpm lint` and `pnpm test` before pushing.
-- Use descriptive commit messages (`type(scope): summary`).
-- Fill out PR templates with change summary, testing evidence, and linked issues.
-- Ensure Docker Compose stack starts cleanly if infrastructure changes are made.
+## 📜 Contributing
 
----
+Thank you for your interest in contributing to Anankor! Here are some guidelines to follow when contributing:
 
-## Security & Compliance
-- Treat Discord tokens like passwords. Do not share in logs, issue threads, or screenshots.
-- Use hashed or redacted values when inspecting token claims (`anankor:workers:claims:<sha256>`).
-- Review source files for accidental secrets before committing (`git diff` + `rg` for token patterns).
-- Rotate credentials regularly; update `infra/docker/.env` and regenerate worker claims accordingly.
-- Apply OS and dependency updates promptly via `pnpm update` and base image upgrades.
+1. Fork the repository and create a new branch for your feature or bug fix.
+2. Write clean and concise code that follows the established coding style.
+3. Create detailed and thorough documentation for any new features or changes.
+4. Write and run tests for your code.
+5. Submit a pull request with your changes.
+   Your contribution will be reviewed by the project maintainers, and any necessary feedback or changes will be discussed with you. We appreciate your help in making Anankor better!
 
----
+## 🔐 License
 
-## License
-A formal license has not yet been added. Until then, contributions are governed by the repository maintainer’s discretion. Add a `LICENSE` file before public release.
+Distributed under the GPL-3.0 license. See [![LICENSE](https://img.shields.io/github/license/your-org/anankor?style=social)](https://github.com/your-org/anankor/blob/main/LICENSE) for more information.
 
----
+## ☕ Donate
 
-For architecture deep-dives and operational diagrams, consult the `docs/` directory. Contributions that improve clarity, automation, or reliability are welcome—please open an issue or pull request to discuss substantial changes.
+Do you like this project? Support it by donating!
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H7LKT9L)
+
+## 👥 Contributors
+
+Thanks go to these wonderful people:
+<a href="https://github.com/your-org/anankor/graphs/contributors">
+<img src="https://contrib.rocks/image?repo=your-org/anankor" />
+</a>
+
+[version-shield]: https://img.shields.io/github/package-json/v/your-org/anankor?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/your-org/anankor.svg?style=for-the-badge
+[contributors-url]: https://github.com/your-org/anankor/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/your-org/anankor.svg?style=for-the-badge
+[forks-url]: https://github.com/your-org/anankor/network/members
+[stars-shield]: https://img.shields.io/github/stars/your-org/anankor.svg?style=for-the-badge
+[stars-url]: https://github.com/your-org/anankor/stargazers
+[issues-shield]: https://img.shields.io/github/issues/your-org/anankor.svg?style=for-the-badge
+[issues-url]: https://github.com/your-org/anankor/issues
+[license-shield]: https://img.shields.io/github/license/your-org/anankor.svg?style=for-the-badge
+[license-url]: https://github.com/your-org/anankor/blob/main/LICENSE

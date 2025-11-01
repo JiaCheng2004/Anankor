@@ -1,0 +1,88 @@
+services:
+    ## services for lavalink
+    lavalink:
+        container_name: anankor-lavalink
+        image: ghcr.io/lavalink-devs/lavalink:latest
+        restart: unless-stopped
+        environment:
+            - _JAVA_OPTIONS=-Xmx6G
+            - SERVER_PORT=2333
+        volumes:
+            # mount application.yml from the same directory or use environment variables
+            - ./Lavalink/application.yml:/opt/Lavalink/application.yml
+            # persist plugins between restarts, make sure to set the correct permissions (user: 322, group: 322)
+            - ./Lavalink/plugins/:/opt/Lavalink/plugins/
+        
+        networks:
+            - lavalink
+        #expose:
+        # lavalink exposes port 2333 to connect to for other containers (this is for documentation purposes only)
+        #- 2333
+        #ports:
+        ports:
+          - "2333:2333"
+        healthcheck:
+            test: 'curl -H "Authorization: youshallnotpass" -s http://localhost:2333/version'
+            interval: 10s
+            timeout: 10s
+            retries: 5
+            start_period: 10s
+    # services for postgresql database
+    # postgres:
+    #         container_name: anankor-postgres
+    #         image: postgres:16
+    #         restart: on-failure
+    #         environment:
+    #             POSTGRES_USER: anankor
+    #             POSTGRES_PASSWORD: anankor
+    #             POSTGRES_DB: anankor
+    #
+    #         volumes:
+    #             - ./Postgres/data:/var/lib/postgresql/data
+    #         healthcheck:
+    #             test: 'pg_isready -U anankor'
+    #             interval: 10s
+    #             timeout: 10s
+    #             retries: 5
+    #             start_period: 10s
+
+    # services for mongodb database
+    #mongodb:
+    #container_name: anankor-mongodb
+    #image: 'bitnami/mongodb:4.4'
+    #restart: on-failure
+    #environment:
+    #MONGODB_ADVERTISED_HOSTNAME: 127.0.0.1
+    #MONGODB_REPLICA_SET_MODE: primary
+    #MONGODB_ROOT_USER: mongoadmin
+    #MONGODB_ROOT_PASSWORD: mongopassword
+    #MONGODB_REPLICA_SET_KEY: replicasetkey123
+    #volumes: - ./MongoDB/data:/data/db
+
+    # services for Anankor
+    anankor:
+        container_name: anankor
+        build:
+            context: .
+            dockerfile: Dockerfile
+        env_file:
+            - .env
+        environment:
+            # lavalink nodes
+            - NODES=[{"id":"Anankor","host":"lavalink","port":2333,"authorization":"youshallnotpass"}]
+            # database url
+        #    - DATABASE_URL= put your database url here (mongodb or postgres)
+        #   - DATABASE_URL=postgresql://anankor:anankor@postgres:5432/anankor (for postgres)
+        #   - DATABASE_URL=mongodb://mongoadmin:mongopassword@mongodb:27017/anankor?authSource=admin (for mongodb)
+
+        volumes:
+            - ./locales:/opt/anankor/locales
+        restart: on-failure
+        depends_on:
+            lavalink:
+                condition: service_healthy
+        networks:
+            - lavalink
+networks:
+    lavalink:
+        name: lavalink
